@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Another Basic 4-Key Rhythm Game</title>
+    <link href="styles.css" rel="stylesheet">
+    <script src="jszip.js"></script>
+</head>
+<body>
+    <label for="file-drop" id="file-drop-label" class="inactive">
+        <span>Drop .osz file here</span>
+        <input type="file" id="file-drop" accept=".osz" multiple>
+    </label>
+    <div id="main-menu">
+        <span id="title">average basic 4 key rhythm game</span><br>
+        <button id="play-btn">Play</button>
+    </div>
+    <div id="map-list" style="display: none;">
+        <div id="map-info">
+            <span id="map-name">Map Name (again)</span>
+        </div>
+    </div>
+    <div id="game" style="display: none;">
+        <div id="stats">
+            <span id="score">Score: 0</span><br>
+            <span id="combo">Combo: 0</span><br>
+            <span id="accuracy">Accuracy: 0%</span><br>
+            <div id="top-middle">
+                <span id="current-stars">0.00*</span><br>
+                <span id="performance">0.0 pf</span><br><br>
+                <span id="judgment"></span><br>
+                <span id="offset"></span>
+            </div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+    </div>
+    <script src="map-list.js" type="module"></script>
+    <script src="main.js" type="module"></script>
+    <script src="menus.js"></script>
+</body>
+</html>
