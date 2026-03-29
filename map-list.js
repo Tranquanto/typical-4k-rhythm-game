@@ -1,7 +1,25 @@
 import { getPerformance, getStarRating } from "./calculator.js";
 import { rand01 } from "../the-draconic-depths/js/perlin.js";
 
-const maps = [];
+let game = {
+    speed: 1
+};
+
+let maps = [];
+
+function recalcStars() {
+    for (let i = 0; i < maps.length; i++) {
+        const map = maps[i];
+        const mapElem = document.getElementById(`map-${map.id}`);
+        const diffElem = mapElem.querySelector(".map-difficulty");
+        const stars = map.getStars();
+        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0).toFixed(1)} max pp`;
+        diffElem.style.color = getColor(stars);
+    }
+}
+
+window.game = game;
+window.recalcStars = recalcStars;
 
 const colors = {
     0: "#fff",
@@ -120,9 +138,11 @@ document.getElementById("file-drop").addEventListener("change", e => {
                         const audioBlob = await zip.file(audioFile).async("blob");
                         const audioURL = URL.createObjectURL(audioBlob);
                         const audio = new Audio(audioURL);
+                        audio.preservesPitch = false;
                         
                         // create the map element
                         const mapElem = document.createElement("div");
+                        mapElem.id = `map-${maps.length}`;
                         mapElem.classList.add("map-entry");
                         
                         const titleElem = document.createElement("span");
@@ -132,10 +152,22 @@ document.getElementById("file-drop").addEventListener("change", e => {
 
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
-                        const stars = getStarRating(hitObjects);
-                        diffElem.textContent = `${stars.toFixed(2)}*`;
+                        const stars = getStarRating(hitObjects, game.speed);
+                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0).toFixed(1)} max pp`;
                         diffElem.style.color = getColor(stars);
                         mapElem.appendChild(diffElem);
+                        mapElem.setAttribute("data-id", maps.length);
+
+                        maps.push({
+                            id: maps.length,
+                            title,
+                            artist,
+                            version,
+                            audio,
+                            hitObjects,
+                            hitObjectsPerInterval,
+                            getStars: () => getStarRating(hitObjects, game.speed)
+                        });
                         
                         mapElem.addEventListener("click", async () => { // start game
                             document.getElementById("map-list").style.display = "none";
@@ -148,6 +180,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                             
                             await audio.play();
                             audio.pause();
+                            audio.playbackRate = game.speed;
                             let startTime = performance.now() + 1000;
                             setTimeout(async () => {
                                 await audio.play();
@@ -170,67 +203,28 @@ document.getElementById("file-drop").addEventListener("change", e => {
                             let misses = 0;
                             let cumulativeAccuracy = 0;
                             let cumulativeOffset = 0;
-
-                            function gameLoop() {
-                                const currentTime = performance.now() - startTime;
-                                const currentInterval = Math.floor(currentTime / 1000);
-                                canvas.width = canvas.width;
-
-                                // draw the columns
-                                ctx.fillStyle = "#333";
-                                for (let i = 0; i < 4; i++) {
-                                    ctx.fillRect(i * 100 + 4, 0, 96, canvas.height);
-                                }
-
-                                // draw the floor
-                                ctx.fillStyle = "#555";
-                                ctx.fillRect(0, canvas.height - 160, canvas.width, 160);
-
-                                for (let i = currentInterval - 1; i < currentInterval + 3; i++) {
-                                    const hitObjects = hitObjectsPerInterval[i];
-                                    if (hitObjects) {
-                                        for (let j = 0; j < hitObjects.length; j++) {
-                                            const hitObject = hitObjects[j];
-                                            const timeUntilHit = hitObject.time - currentTime;
-                                            const y = canvas.height - (timeUntilHit / 500) * canvas.height - 160;
-                                            ctx.fillStyle = "#fff";
-                                            ctx.fillRect(hitObject.column * 100 + 4, y, 96, 40);
-
-                                            if (timeUntilHit < -200) {
-                                                // missed
-                                                hitObjects.splice(j, 1);
-                                                j--;
-                                                misses++;
-                                                combo = 0;
-
-                                                document.getElementById("judgment").textContent = "Miss";
-                                                document.getElementById("judgment").style.color = "#f55";
-                                            }
-                                        }
-                                    }
-                                }
-
-                                document.getElementById("score").textContent = `Score: ${Math.floor(score)}`;
-                                document.getElementById("combo").textContent = `Combo: ${combo}`;
-                                document.getElementById("accuracy").textContent = `Accuracy: ${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
-
-                                const stars = getStarRating(hitObjects.slice(0, hits + misses));
-                                const pf = getPerformance(stars, cumulativeAccuracy / (hits + misses) || 0, misses);
-                                document.getElementById("performance").textContent = `${pf.toFixed(1)} pf`;
-
-                                document.getElementById("current-stars").textContent = `${stars?.toFixed(2) || "0.00"}*`;
-                                document.getElementById("current-stars").style.color = getColor(stars);
-
-                                requestAnimationFrame(gameLoop);
-                            }
-                            gameLoop();
+                            let approachTime = 800 * game.speed;
+                            let inputEvents = [];
+                            let pulses = [0, 0, 0, 0]; // pulse time per column
 
                             document.addEventListener("keydown", e => {
                                 const column = ["d", "f", "j", "k"].indexOf(e.key);
                                 if (column !== -1) {
-                                    const interval = Math.floor((performance.now() - startTime) / 1000);
+                                    inputEvents.push({column, time: (performance.now() - startTime) * game.speed});
+                                    hitsound.currentTime = 0;
+                                    hitsound.play();
+
+                                    draw(false);
+                                }
+                            });
+
+                            function draw(loop) {
+                                for (const event of inputEvents) {
+                                    const {column, time} = event;
+                                    const interval = Math.floor(time / 1000);
                                     let hitObjects;
-                                    for (let i = interval - 1; i < interval + 2; i++) {
+                                    pulses[column] = time;
+                                    for (let i = Math.floor(interval - game.speed); i < interval + 2 * game.speed; i++) {
                                         if (hitObjectsPerInterval[i]?.length) {
                                             hitObjects = hitObjectsPerInterval[i];
                                             break;
@@ -240,7 +234,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                                         for (let i = 0; i < hitObjects.length; i++) {
                                             const hitObject = hitObjects[i];
                                             if (hitObject.column === column) {
-                                                const timeDiff = hitObject.time - (performance.now() - startTime); // negative = late
+                                                const timeDiff = hitObject.time - time; // negative = late
                                                 const absTimeDiff = Math.abs(timeDiff);
                                                 if (absTimeDiff < 200) {
                                                     if (absTimeDiff < 150) {
@@ -286,7 +280,73 @@ document.getElementById("file-drop").addEventListener("change", e => {
                                         }
                                     }
                                 }
-                            });
+                                inputEvents.length = 0;
+                                const currentTime = (performance.now() - startTime) * game.speed;
+                                const currentInterval = Math.floor(currentTime / 1000);
+                                canvas.width = canvas.width;
+
+                                // draw the columns
+                                for (let i = 0; i < 4; i++) {
+                                    ctx.fillStyle = "#33006d";
+                                    ctx.fillRect(i * 100 + 2, 0, 96, canvas.height);
+
+                                    // floor
+                                    ctx.fillStyle = "#4b00a0";
+                                    ctx.fillRect(i * 100 + 2, canvas.height - 160, 96, 160);
+
+                                    // judgment line
+                                    ctx.fillStyle = "#7700ff";
+                                    ctx.fillRect(i * 100 + 2, canvas.height - 160, 96, 40);
+
+                                    // pulses
+                                    if (pulses[i] > 0) {
+                                        const opacity = (pulses[i] - currentTime) / 500 + 0.5;
+                                        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+                                        ctx.fillRect(i * 100 + 2, canvas.height - 160, 96, 160);
+                                    }
+                                }
+
+                                for (let i = Math.floor(currentInterval - game.speed); i < currentInterval + 3 * game.speed; i++) {
+                                    const hitObjects = hitObjectsPerInterval[i];
+                                    if (hitObjects) {
+                                        for (let j = 0; j < hitObjects.length; j++) {
+                                            const hitObject = hitObjects[j];
+                                            const timeUntilHit = hitObject.time - currentTime;
+                                            const y = canvas.height - (timeUntilHit / approachTime) * canvas.height - 160;
+                                            ctx.fillStyle = "#b574ff";
+                                            ctx.fillRect(hitObject.column * 100 + 2, y, 96, 40);
+
+                                            ctx.fillStyle = "#fff";
+                                            ctx.fillRect(hitObject.column * 100 + 2, y + 30, 96, 10);
+
+                                            if (timeUntilHit < -200) {
+                                                // missed
+                                                hitObjects.splice(j, 1);
+                                                j--;
+                                                misses++;
+                                                combo = 0;
+
+                                                document.getElementById("judgment").textContent = "Miss";
+                                                document.getElementById("judgment").style.color = "#f55";
+                                            }
+                                        }
+                                    }
+                                }
+
+                                document.getElementById("score").textContent = `Score: ${Math.floor(score)}`;
+                                document.getElementById("combo").textContent = `Combo: ${combo}`;
+                                document.getElementById("accuracy").textContent = `Accuracy: ${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
+
+                                const stars = getStarRating(hitObjects.slice(0, hits + misses), game.speed);
+                                const pf = getPerformance(stars, cumulativeAccuracy / (hits + misses) || 0, misses, hits + misses);
+                                document.getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
+
+                                document.getElementById("current-stars").textContent = `${stars?.toFixed(2) || "0.00"}*`;
+                                document.getElementById("current-stars").style.color = getColor(stars);
+
+                                if (loop) requestAnimationFrame(draw);
+                            }
+                            draw(true);
                         });
 
                         document.getElementById("map-list").appendChild(mapElem);

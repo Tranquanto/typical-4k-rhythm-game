@@ -1,4 +1,4 @@
-export function getStarRating(hitObjects) {
+export function getStarRating(hitObjects, speedMul = 1) {
     if (hitObjects.length === 0) return 0; // no objects = 0 stars
 
     const columns = [];
@@ -12,7 +12,7 @@ export function getStarRating(hitObjects) {
     let columnChanges = [1, 1, 1, 1];
 
     for (let i = 0; i < hitObjects.length; i++) {
-        const delta = hitObjects[i].time - (hitObjects[i - 1]?.time || -Infinity); // time since last object (ms); first object is treated as free
+        const delta = (hitObjects[i].time - (hitObjects[i - 1]?.time || -Infinity)) / speedMul; // time since last object (ms); first object is treated as free
         if (delta === 0) {
             lastAddition2++;
             difficulty += lastAddition * lastAddition2 ** 3; // chord; more objects in chord = more difficult
@@ -30,6 +30,9 @@ export function getStarRating(hitObjects) {
     return difficulty ** 0.25 * 6; // convert "difficulty" to star rating;
 }
 
-export function getPerformance(stars, accuracy, misses) { // stars to performance points
-    return stars ** 2.5 * 6 * (accuracy ** 10) / (1 + misses / 10);
+export function getPerformance(stars, accuracy, misses, notes) { // stars to performance points
+    const mul = (accuracy ** 8) / (1 + misses * 40 / (notes || 1));
+    return Math.max(1.7 ** stars * 9 * mul + (stars + 3) ** 2.4 / 2 * mul, 0) - 15.98 * mul;
 }
+
+for (let i = 0; i < 15; i++) console.log(i, getPerformance(i, 1, 0, 1000).toFixed(2));
