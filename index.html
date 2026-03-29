@@ -17,8 +17,12 @@
         <button id="play-btn">Play</button>
     </div>
     <div id="map-list" style="display: none;">
-        <div id="map-info">
-            <span id="map-name">Map Name (again)</span>
+        <div id="mods">
+            <div id="mod-speed" class="mod">
+                <label for="mod-speed-input">Speed</label>
+                <input type="range" id="mod-speed-input" min="0.5" max="2" value="1" step="0.05">
+                <span id="mod-speed-value">1.00x</span>
+            </div>
         </div>
     </div>
     <div id="game" style="display: none;">
@@ -28,15 +32,14 @@
             <span id="accuracy">Accuracy: 0%</span><br>
             <div id="top-middle">
                 <span id="current-stars">0.00*</span><br>
-                <span id="performance">0.0 pf</span><br><br>
+                <span id="performance">0.0 pp</span><br><br>
                 <span id="judgment"></span><br>
                 <span id="offset"></span>
             </div>
         </div>
         <canvas id="game-canvas"></canvas>
     </div>
-    <script src="map-list.js" type="module"></script>
-    <script src="main.js" type="module"></script>
+    <script src="mods.js" type="module"></script>
     <script src="menus.js"></script>
 </body>
 </html>

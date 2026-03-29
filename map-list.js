@@ -1,25 +1,22 @@
 import { getPerformance, getStarRating } from "./calculator.js";
 import { rand01 } from "../the-draconic-depths/js/perlin.js";
 
-let game = {
+export const game = {
     speed: 1
 };
 
-let maps = [];
+export const maps = [];
 
-function recalcStars() {
+export function recalcStars() {
     for (let i = 0; i < maps.length; i++) {
         const map = maps[i];
         const mapElem = document.getElementById(`map-${map.id}`);
         const diffElem = mapElem.querySelector(".map-difficulty");
         const stars = map.getStars();
-        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0).toFixed(1)} max pp`;
+        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, 1, game.speed).toFixed(1)} max pp`;
         diffElem.style.color = getColor(stars);
     }
 }
-
-window.game = game;
-window.recalcStars = recalcStars;
 
 const colors = {
     0: "#fff",
@@ -117,6 +114,8 @@ document.getElementById("file-drop").addEventListener("change", e => {
                                 column: useRandom ? [0, 1, 2, 3][Math.floor(rand01(1, 1, i, 57) * 4)] : Math.floor(Number(parts[0]) / 128),
                                 time: Number(parts[2])
                             };
+                        }).filter((h, i, arr) => {
+                            return !arr.slice(0, i).some(prev => prev.column === h.column && prev.time === h.time); // remove duplicates
                         });
 
                         for (let i = 1; i < hitObjects.length; i++) {
@@ -153,7 +152,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
                         const stars = getStarRating(hitObjects, game.speed);
-                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0).toFixed(1)} max pp`;
+                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, 1, game.speed).toFixed(1)} max pp`;
                         diffElem.style.color = getColor(stars);
                         mapElem.appendChild(diffElem);
                         mapElem.setAttribute("data-id", maps.length);
@@ -338,7 +337,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                                 document.getElementById("accuracy").textContent = `Accuracy: ${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
 
                                 const stars = getStarRating(hitObjects.slice(0, hits + misses), game.speed);
-                                const pf = getPerformance(stars, cumulativeAccuracy / (hits + misses) || 0, misses, hits + misses);
+                                const pf = getPerformance(stars, cumulativeAccuracy / (hits + misses) || 0, misses, hits + misses, game.speed);
                                 document.getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
 
                                 document.getElementById("current-stars").textContent = `${stars?.toFixed(2) || "0.00"}*`;

@@ -30,9 +30,9 @@ export function getStarRating(hitObjects, speedMul = 1) {
     return difficulty ** 0.25 * 6; // convert "difficulty" to star rating;
 }
 
-export function getPerformance(stars, accuracy, misses, notes) { // stars to performance points
-    const mul = (accuracy ** 8) / (1 + misses * 40 / (notes || 1));
+export function getPerformance(stars, accuracy = 1, misses = 0, notes = 1, speedMul = 1) { // stars to performance points
+    const mul = (accuracy ** (8 / speedMul)) / (1 + misses * 40 / (notes || 1));
     return Math.max(1.7 ** stars * 9 * mul + (stars + 3) ** 2.4 / 2 * mul, 0) - 15.98 * mul;
 }
 
-for (let i = 0; i < 15; i++) console.log(i, getPerformance(i, 1, 0, 1000).toFixed(2));
+for (let i = 0; i < 15; i++) console.log(i, getPerformance(i).toFixed(2));
