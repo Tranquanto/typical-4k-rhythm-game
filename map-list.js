@@ -13,7 +13,7 @@ export function recalcStars() {
         const mapElem = document.getElementById(`map-${map.id}`);
         const diffElem = mapElem.querySelector(".map-difficulty");
         const stars = map.getStars();
-        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, 1, game.speed).toFixed(1)} max pp`;
+        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, map.hitObjects.length, game.speed).toFixed(1)} max pp`;
         diffElem.style.color = getColor(stars);
     }
 }
@@ -111,7 +111,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                         const hitObjects = lines.slice(hitObjectsIndex + 1).map((l, i) => {
                             const parts = l.split(",");
                             return {
-                                column: useRandom ? [0, 1, 2, 3][Math.floor(rand01(1, 1, i, 57) * 4)] : Math.floor(Number(parts[0]) / 128),
+                                column: useRandom ? [0, 1, 2, 3][Math.floor(rand01(1, 1, i, 57 + Number(parts[2])) * 4)] : Math.floor(Number(parts[0]) / 128),
                                 time: Number(parts[2])
                             };
                         }).filter((h, i, arr) => {
@@ -120,7 +120,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
 
                         for (let i = 1; i < hitObjects.length; i++) {
                             if (hitObjects[i].column === hitObjects[i - 1].column && useRandom) {
-                                hitObjects[i].column = [0, 1, 2, 3].filter(c => c !== hitObjects[i - 1].column)[Math.floor(rand01(1, 2, i, 57) * 3)];
+                                hitObjects[i].column = [0, 1, 2, 3].filter(c => c !== hitObjects[i - 1].column)[Math.floor(rand01(1, 2, i, 57 + hitObjects[i].time) * 3)];
                             }
                         }
 
@@ -152,7 +152,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
                         const stars = getStarRating(hitObjects, game.speed);
-                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, 1, game.speed).toFixed(1)} max pp`;
+                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, hitObjects.length, game.speed).toFixed(1)} max pp`;
                         diffElem.style.color = getColor(stars);
                         mapElem.appendChild(diffElem);
                         mapElem.setAttribute("data-id", maps.length);
@@ -168,7 +168,9 @@ document.getElementById("file-drop").addEventListener("change", e => {
                             getStars: () => getStarRating(hitObjects, game.speed)
                         });
                         
-                        mapElem.addEventListener("click", async () => { // start game
+                        mapElem.addEventListener("click", async e => { // start game
+                            let auto = false;
+                            if (e.ctrlKey) auto = true;
                             document.getElementById("map-list").style.display = "none";
                             document.getElementById("game").style.display = "";
 
@@ -206,7 +208,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                             let inputEvents = [];
                             let pulses = [0, 0, 0, 0]; // pulse time per column
 
-                            document.addEventListener("keydown", e => {
+                            if (!auto) document.addEventListener("keydown", e => {
                                 const column = ["d", "f", "j", "k"].indexOf(e.key);
                                 if (column !== -1) {
                                     inputEvents.push({column, time: (performance.now() - startTime) * game.speed});
@@ -217,9 +219,17 @@ document.getElementById("file-drop").addEventListener("change", e => {
                                 }
                             });
 
+                            if (auto) {
+                                for (const hitObject of hitObjects) {
+                                    inputEvents.push({column: hitObject.column, time: hitObject.time});
+                                }
+                            }
+
                             function draw(loop) {
                                 for (const event of inputEvents) {
                                     const {column, time} = event;
+                                    if (time / game.speed + startTime > performance.now()) continue;
+                                    event.processed = true;
                                     const interval = Math.floor(time / 1000);
                                     let hitObjects;
                                     pulses[column] = time;
@@ -279,7 +289,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                                         }
                                     }
                                 }
-                                inputEvents.length = 0;
+                                inputEvents = inputEvents.filter(e => !e.processed);
                                 const currentTime = (performance.now() - startTime) * game.speed;
                                 const currentInterval = Math.floor(currentTime / 1000);
                                 canvas.width = canvas.width;

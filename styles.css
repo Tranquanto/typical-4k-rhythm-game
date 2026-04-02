@@ -70,7 +70,6 @@ button {
 
 .map-name, #map-name {
     font-size: 36px;
-    font-weight: bold;
     display: block;
 }
 
@@ -112,6 +111,7 @@ button {
 }
 
 #game-canvas {
+    cursor: none;
     position: fixed;
     left: 50%;
     top: 0;
@@ -128,7 +128,6 @@ button {
 #top-middle {
     text-align: center;
     font-size: 24px;
-    font-weight: bold;
     position: fixed;
     top: 8px;
     left: 50%;
