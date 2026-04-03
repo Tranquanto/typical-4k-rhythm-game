@@ -1,5 +1,6 @@
-import { getPerformance, getStarRating } from "./calculator.js";
+import { getPerformance, getRank, getStarRating } from "./calculator.js";
 import { rand01 } from "../the-draconic-depths/js/perlin.js";
+import { getElementById } from "./getElementById.js"; // to prevent constantly calling document.getElementById
 
 export const game = {
     speed: 1
@@ -10,7 +11,7 @@ export const maps = [];
 export function recalcStars() {
     for (let i = 0; i < maps.length; i++) {
         const map = maps[i];
-        const mapElem = document.getElementById(`map-${map.id}`);
+        const mapElem = getElementById(`map-${map.id}`);
         const diffElem = mapElem.querySelector(".map-difficulty");
         const stars = map.getStars();
         diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, map.hitObjects.length, game.speed).toFixed(1)} max pp`;
@@ -77,16 +78,16 @@ for (const elem of document.querySelectorAll(".map-difficulty")) {
 
 window.addEventListener("dragover", e => {
     if (e.dataTransfer.types.includes("Files")) {
-        document.getElementById("file-drop-label").classList.remove("inactive");
+        getElementById("file-drop-label").classList.remove("inactive");
     }
 });
 
-document.getElementById("file-drop").addEventListener("dragleave", () => {
-    document.getElementById("file-drop-label").classList.add("inactive");
+getElementById("file-drop").addEventListener("dragleave", () => {
+    getElementById("file-drop-label").classList.add("inactive");
 })
 
-document.getElementById("file-drop").addEventListener("change", e => {
-    document.getElementById("file-drop-label").classList.add("inactive");
+getElementById("file-drop").addEventListener("change", e => {
+    getElementById("file-drop-label").classList.add("inactive");
     for (const file of e.target.files) {
         let zip;
 
@@ -129,14 +130,14 @@ document.getElementById("file-drop").addEventListener("change", e => {
                             }
                         }
 
-                        const hitObjectsPerInterval = {};
+                        const hitObjectsPerSecond = {};
                         for (let i = 0; i < hitObjects.length; i++) {
                             const hitObject = hitObjects[i];
                             const interval = Math.floor(hitObject.time / 1000);
-                            if (!hitObjectsPerInterval[interval]) {
-                                hitObjectsPerInterval[interval] = [];
+                            if (!hitObjectsPerSecond[interval]) {
+                                hitObjectsPerSecond[interval] = [];
                             }
-                            hitObjectsPerInterval[interval].push(hitObject);
+                            hitObjectsPerSecond[interval].push(hitObject);
                         }
 
                         const audioBlob = await zip.file(audioFile).async("blob");
@@ -169,15 +170,17 @@ document.getElementById("file-drop").addEventListener("change", e => {
                             version,
                             audio,
                             hitObjects,
-                            hitObjectsPerInterval,
+                            hitObjectsPerInterval: hitObjectsPerSecond,
                             getStars: () => getStarRating(hitObjects, game.speed)
                         });
-                        
-                        mapElem.addEventListener("click", async e => { // start game
+
+                        async function loadMap(e) { // start game
+                            const hitObjectsPerInterval = JSON.parse(JSON.stringify(hitObjectsPerSecond));
+
                             let auto = false;
                             if (e.ctrlKey) auto = true;
-                            document.getElementById("map-list").style.display = "none";
-                            document.getElementById("game").style.display = "";
+                            getElementById("map-list").style.display = "none";
+                            getElementById("game").style.display = "";
 
                             const hitsound = new Audio("hitnormal.wav");
                             hitsound.volume = 0.5;
@@ -194,7 +197,7 @@ document.getElementById("file-drop").addEventListener("change", e => {
                             }, 1000);
 
                             /** @type {HTMLCanvasElement} */
-                            const canvas = document.getElementById("game-canvas");
+                            const canvas = getElementById("game-canvas");
                             const ctx = canvas.getContext("2d");
                             function resize() {
                                 canvas.width = 400;
@@ -212,17 +215,30 @@ document.getElementById("file-drop").addEventListener("change", e => {
                             let approachTime = 800 * game.speed;
                             let inputEvents = [];
                             let pulses = [0, 0, 0, 0]; // pulse time per column
+                            let completed = false;
 
-                            if (!auto) document.addEventListener("keydown", e => {
+                            document.onkeydown = e => {
+                                if (completed) return;
                                 const column = ["d", "f", "j", "k"].indexOf(e.key);
-                                if (column !== -1) {
+                                if (!auto && column !== -1) {
                                     inputEvents.push({column, time: (performance.now() - startTime) * game.speed});
                                     hitsound.currentTime = 0;
                                     hitsound.play();
 
                                     draw(false);
+                                } else if (e.key === " ") {
+                                    console.log((performance.now() - startTime) * game.speed, hitObjects[0].time - approachTime - 1000);
+                                    if (hits + misses === hitObjects.length) {
+                                        // skip to results
+                                        completed = true;
+                                    } else if (hits + misses === 0 && (performance.now() - startTime) * game.speed < hitObjects[0].time - approachTime - 1000) {
+                                        // skip to first object
+                                        audio.currentTime = (hitObjects[0].time - approachTime - 1000) / 1000;
+                                        startTime = performance.now() - ((hitObjects[0].time - approachTime) - 1000) / game.speed;
+                                        draw(false);
+                                    }
                                 }
-                            });
+                            };
 
                             if (auto) {
                                 for (const hitObject of hitObjects) {
@@ -257,35 +273,35 @@ document.getElementById("file-drop").addEventListener("change", e => {
                                                         hitsound.play();
 
                                                         cumulativeOffset += timeDiff;
-                                                        document.getElementById("offset").textContent = `Avg. Error: ${(cumulativeOffset / hits).toFixed(2)} ms`;
+                                                        getElementById("offset").textContent = `Avg. Error: ${(cumulativeOffset / hits).toFixed(2)} ms`;
                                                     }
                                                     if (absTimeDiff < 50) {
                                                         score += 300 * (1 + combo / 25);
                                                         combo++;
                                                         cumulativeAccuracy += 1;
 
-                                                        document.getElementById("judgment").textContent = "Perfect";
-                                                        document.getElementById("judgment").style.color = "#5ff";
+                                                        getElementById("judgment").textContent = "Perfect";
+                                                        getElementById("judgment").style.color = "#5ff";
                                                     } else if (absTimeDiff < 100) {
                                                         score += 100 * (1 + combo / 25);
                                                         combo++;
                                                         cumulativeAccuracy += 1 / 3;
 
-                                                        document.getElementById("judgment").textContent = "Okay";
-                                                        document.getElementById("judgment").style.color = "#5f5";
+                                                        getElementById("judgment").textContent = "Okay";
+                                                        getElementById("judgment").style.color = "#5f5";
                                                     } else if (absTimeDiff < 150) {
                                                         score += 50 * (1 + combo / 25);
                                                         combo++;
                                                         cumulativeAccuracy += 1 / 6;
 
-                                                        document.getElementById("judgment").textContent = "Bad";
-                                                        document.getElementById("judgment").style.color = "#ff5";
+                                                        getElementById("judgment").textContent = "Bad";
+                                                        getElementById("judgment").style.color = "#ff5";
                                                     } else { // extremely early
                                                         misses++;
                                                         combo = 0;
 
-                                                        document.getElementById("judgment").textContent = "Miss";
-                                                        document.getElementById("judgment").style.color = "#f55";
+                                                        getElementById("judgment").textContent = "Miss";
+                                                        getElementById("judgment").style.color = "#f55";
                                                     }
                                                     hitObjects.splice(i, 1);
                                                     break;
@@ -340,30 +356,72 @@ document.getElementById("file-drop").addEventListener("change", e => {
                                                 misses++;
                                                 combo = 0;
 
-                                                document.getElementById("judgment").textContent = "Miss";
-                                                document.getElementById("judgment").style.color = "#f55";
+                                                getElementById("judgment").textContent = "Miss";
+                                                getElementById("judgment").style.color = "#f55";
                                             }
                                         }
                                     }
                                 }
 
-                                document.getElementById("score").textContent = `Score: ${Math.floor(score)}`;
-                                document.getElementById("combo").textContent = `Combo: ${combo}`;
-                                document.getElementById("accuracy").textContent = `Accuracy: ${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
+                                getElementById("score").textContent = `Score: ${Math.floor(score)}`;
+                                getElementById("combo").textContent = `Combo: ${combo}`;
+                                getElementById("accuracy").textContent = `Accuracy: ${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
 
                                 const stars = getStarRating(hitObjects.slice(0, hits + misses), game.speed);
                                 const pf = getPerformance(stars, cumulativeAccuracy / (hits + misses) || 0, misses, hits + misses, game.speed);
-                                document.getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
+                                getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
 
-                                document.getElementById("current-stars").textContent = `${stars?.toFixed(2) || "0.00"}*`;
-                                document.getElementById("current-stars").style.color = getColor(stars);
+                                const stars2 = getStarRating((hitObjectsPerSecond[currentInterval - 1] || []).concat(hitObjectsPerSecond[currentInterval] || []).concat(hitObjectsPerSecond[currentInterval + 1] || []), game.speed, 2);
+
+                                getElementById("current-stars").textContent = `${stars2?.toFixed(2) || "0.00"}*`;
+                                getElementById("current-stars").style.color = getColor(stars2);
+
+                                getElementById("cumulative-stars").textContent = `${stars?.toFixed(2) || "0.00"}*`;
+                                getElementById("cumulative-stars").style.color = getColor(stars);
+
+                                if ((hits + misses === hitObjects.length && audio.ended) || completed) {
+                                    // show results
+                                    completed = true;
+                                    loop = false;
+                                    getElementById("game").style.display = "none";
+                                    getElementById("results").style.display = "";
+
+                                    getElementById("results-title").textContent = `${artist} - ${title} [${version}]`;
+
+                                    getElementById("results-difficulty").textContent = `${getStarRating(hitObjects, game.speed).toFixed(2)}*`;
+                                    getElementById("results-difficulty").style.color = getColor(getStarRating(hitObjects, game.speed));
+
+                                    const rank = getRank(cumulativeAccuracy / (hits + misses) || 0, misses);
+                                    getElementById("results-rank").textContent = `${rank.rank.replace("X", "SS")}`;
+                                    getElementById("results-rank").style.setProperty("--rank-color", rank.color);
+                                    getElementById("results-rank").style.setProperty("--rank-glow", /[SX]/.test(rank.rank) ? "8px" : "0");
+
+                                    getElementById("results-score").textContent = `${Math.floor(score).toLocaleString()}`;
+                                    
+                                    getElementById("results-max-combo").textContent = `${combo}x`;
+                                    getElementById("results-accuracy").textContent = `${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
+                                    getElementById("results-performance").textContent = `${pf.toFixed(1)} pp`;
+
+                                    getElementById("results-mods").textContent = `${game.speed.toFixed(2)}x`;
+
+                                    getElementById("retry-btn").onclick = e => {
+                                        getElementById("results").style.display = "none";
+                                        loadMap(e);
+                                    };
+                                    getElementById("results-back-btn").onclick = () => {
+                                        getElementById("results").style.display = "none";
+                                        getElementById("main-menu").style.display = "";
+                                    };
+                                }
 
                                 if (loop) requestAnimationFrame(draw);
                             }
                             draw(true);
-                        });
+                        }
+                        
+                        mapElem.addEventListener("click", loadMap);
 
-                        document.getElementById("map-list").appendChild(mapElem);
+                        getElementById("map-list").appendChild(mapElem);
                     });
                 }
             });

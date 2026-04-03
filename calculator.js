@@ -60,4 +60,24 @@ export function getPerformance(stars, accuracy = 1, misses = 0, notes = stars * 
     return performance;
 }
 
+export function getRank(accuracy, misses) {
+    let colors = {
+        X: "#fc0",
+        S: "#f70",
+        A: "#69d32a",
+        B: "#438be1",
+        C: "#9e4cce",
+        D: "#d23d3d",
+        F: "#555"
+    };
+    let rank = "F";
+    if (accuracy === 1) rank = "X";
+    else if (accuracy >= 0.95 && misses === 0) rank = "S";
+    else if (accuracy >= 0.9) rank = "A";
+    else if (accuracy >= 0.8) rank = "B";
+    else if (accuracy >= 0.7) rank = "C";
+    else if (accuracy >= 0.6) rank = "D";
+    return {rank, color: colors[rank[0]]};
+}
+
 for (let i = 0; i < 15; i++) console.log(i + "*", "|", getPerformance(i, true).map(x => x.toFixed(2)).join(", "));

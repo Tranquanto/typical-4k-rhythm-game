@@ -1,7 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap');
+
 body {
-    background: #000;
+    margin: 0;
+    height: 100dvh;
+    width: 100%;
+    background: linear-gradient(45deg, #203, #406, #203);
     color: #fff;
     font-family: Silkscreen, monospace;
+    user-select: none;
 }
 
 button {
@@ -22,17 +28,17 @@ button {
     font-size: 36px;
     border-radius: 0;
     border: 4px solid #fff;
-    background: #000;
+    background: #406;
     color: inherit;
     cursor: pointer;
 }
 
 #main-menu > button:hover {
-    background: #444;
+    background: #81a;
 }
 
 #main-menu > button:active {
-    background: #333;
+    background: #305;
 }
 
 #title {
@@ -55,7 +61,7 @@ button {
 }
 
 .map-entry {
-    background-color: #222;
+    background-color: #324;
     box-sizing: border-box;
     padding: 16px;
     text-align: right;
@@ -65,7 +71,7 @@ button {
 }
 
 .map-entry:hover {
-    background-color: #444;
+    background-color: #537;
 }
 
 .map-name, #map-name {
@@ -133,4 +139,66 @@ button {
     left: 50%;
     transform: translateX(-50%);
     z-index: 99;
+}
+
+#results {
+    position: fixed;
+    left: 0;
+    top: 50%;
+    width: 100%;
+    text-align: center;
+    transform: translateY(-50%);
+    font-size: 24px;
+}
+
+#results > span {
+    display: block;
+}
+
+#results-title {
+    font-size: 48px;
+}
+
+#results-score {
+    font-size: 48px;
+    margin-bottom: 36px;
+}
+
+#results-accuracy, #results-max-combo, #results-performance {
+    display: inline-block !important;
+    font-size: 24px;
+}
+
+#results-accuracy::after, #results-max-combo::after {
+    content: '|';
+    margin-left: 12px;
+}
+
+#results-performance, #results-mods {
+    margin-bottom: 24px;
+}
+
+#results-rank {
+    position: relative;
+    right: 18px;
+    letter-spacing: -36px;
+    font-size: 144px;
+    font-weight: bold;
+    margin: 48px 0;
+    color: var(--rank-color, #fff);
+    filter: drop-shadow(0 0 8px var(--rank-color, #fff));
+}
+
+#results > button {
+    margin-top: 16px;
+    font-size: 24px;
+    border-radius: 0;
+    border: 4px solid #f8b0ff;
+    background: #406;
+    color: inherit;
+    cursor: pointer;
+}
+
+#results > button:hover {
+    background: #81a;
 }
