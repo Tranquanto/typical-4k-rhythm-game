@@ -108,14 +108,19 @@ document.getElementById("file-drop").addEventListener("change", e => {
                         const useRandom = mode !== "3";
 
                         const hitObjectsIndex = lines.findIndex(l => l === "[HitObjects]");
-                        const hitObjects = lines.slice(hitObjectsIndex + 1).map((l, i) => {
+                        const hitObjects = [...new Set(lines.slice(hitObjectsIndex + 1).map((l, i) => {
                             const parts = l.split(",");
-                            return {
+                            const data = {
                                 column: useRandom ? [0, 1, 2, 3][Math.floor(rand01(1, 1, i, 57 + Number(parts[2])) * 4)] : Math.floor(Number(parts[0]) / 128),
                                 time: Number(parts[2])
                             };
-                        }).filter((h, i, arr) => {
-                            return !arr.slice(0, i).some(prev => prev.column === h.column && prev.time === h.time); // remove duplicates
+                            return `${data.column},${data.time}`;
+                        }))].map(l => {
+                            const parts = l.split(",");
+                            return {
+                                column: Number(parts[0]),
+                                time: Number(parts[1])
+                            };
                         });
 
                         for (let i = 1; i < hitObjects.length; i++) {
