@@ -119,6 +119,8 @@ getElementById("file-drop").addEventListener("change", e => {
                         const artist = lines.find(l => l.startsWith("Artist:")).split(":")[1].trim();
                         const version = lines.find(l => l.startsWith("Version:")).split(":")[1].trim();
                         const mode = lines.find(l => l.startsWith("Mode:")).split(":")[1].trim();
+
+                        const originalKeys = lines.find(l => l.startsWith("CircleSize:"))?.split(":")[1].trim() ?? 4;
                         
                         const useRandom = mode !== "3";
 
@@ -154,7 +156,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                         )[Math.floor(rand01(keys, 1, i, 57 + Number(parts[2])) * keys)]
                                         : Math.max(Math.floor(
                                             Number(parts[0]) / 512 * keys
-                                          - rand01(-5, 1, i, Number(parts[2]) - 93) * 0.5
+                                          - (originalKeys === keys ? rand01(-5, 1, i, Number(parts[2]) - 93) * 0.5 : 0)
                                         ), 0),
                                     time: Number(parts[2])
                                 };
@@ -258,7 +260,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             resize();
 
                             let score = 0;
-                            let combo = 0;
+                            let combo = 0, maxCombo = 0;
                             let hits = 0;
                             let misses = 0;
                             let cumulativeAccuracy = 0;
@@ -380,6 +382,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                             }
                                         }
                                     }
+                                    if (combo > maxCombo) maxCombo = combo;
                                 }
                                 inputEvents = inputEvents.filter(e => !e.processed);
                                 const currentInterval = Math.floor(currentTime / 1000);
@@ -471,7 +474,7 @@ getElementById("file-drop").addEventListener("change", e => {
 
                                     getElementById("results-score").textContent = `${Math.floor(score).toLocaleString()}`;
                                     
-                                    getElementById("results-max-combo").textContent = `${combo}x`;
+                                    getElementById("results-max-combo").textContent = `${maxCombo}x`;
                                     getElementById("results-accuracy").textContent = `${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
                                     getElementById("results-performance").textContent = `${pf.toFixed(1)} pp`;
 

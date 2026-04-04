@@ -208,8 +208,7 @@ button {
     filter: drop-shadow(0 0 8px var(--rank-color, #fff));
 }
 
-#results > button {
-    margin-top: 16px;
+button, #results > button {
     font-size: 24px;
     border-radius: 0;
     border: 4px solid #f8b0ff;
@@ -218,6 +217,18 @@ button {
     cursor: pointer;
 }
 
-#results > button:hover {
+#import-btn {
+    margin-bottom: 16px;
+}
+
+#results > button {
+    margin-top: 16px;
+}
+
+button:hover, #results > button:hover {
     background: #81a;
+}
+
+button:active, #results > button:active {
+    background: #305;
 }

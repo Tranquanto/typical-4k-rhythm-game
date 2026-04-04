@@ -6,6 +6,11 @@
     <title>Typical 4-Key Rhythm Game</title>
     <link href="styles.css" rel="stylesheet">
     <script src="jszip.js"></script>
+
+    <meta property="og:title" content="Typical 4-Key Rhythm Game">
+    <meta property="og:site_name" content="Typical 4-Key Rhythm Game">
+    <meta property="og:url" content="https://tranquanto.github.io/typical-4k-rhythm-game/">
+    <meta property="og:description" content="A simple 4-key rhythm game designed for the web, inspired by games like osu!mania and Quaver. It supports .osz file imports (only, currently). This was initially made solely for a simple star rating and performance calculator.">
 </head>
 <body>
     <div id="background-pulse" style="opacity: 0;"></div>
@@ -19,6 +24,7 @@
     </div>
     <div id="map-list" style="display: none;">
         <div id="mods">
+            <button id="import-btn"><label for="file-drop" style="cursor: pointer;">Import .osz file(s)</label></button>
             <div id="mod-speed" class="mod">
                 <label for="mod-speed-input">Speed</label>
                 <input type="range" id="mod-speed-input" min="0.5" max="2" value="1" step="0.05">
