@@ -1,5 +1,5 @@
 import { getPerformance, getRank, getStarRating } from "./calculator.js";
-import { rand01 } from "../the-draconic-depths/js/perlin.js";
+import { rand01 } from "./rand01.js";
 import { getElementById } from "./getElementById.js"; // to prevent constantly calling document.getElementById
 
 export const game = {
