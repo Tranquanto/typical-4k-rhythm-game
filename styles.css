@@ -86,9 +86,21 @@ button {
     background-color: #537;
 }
 
+.map-artist {
+    font-size: 18px;
+    display: block;
+    opacity: 0.75;
+}
+
 .map-name, #map-name {
     font-size: 36px;
     display: block;
+}
+
+.map-version {
+    font-size: 18px;
+    display: block;
+    margin-bottom: 6px;
 }
 
 #file-drop {

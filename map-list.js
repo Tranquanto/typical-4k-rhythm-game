@@ -198,11 +198,21 @@ getElementById("file-drop").addEventListener("change", e => {
                         const mapElem = document.createElement("div");
                         mapElem.id = `map-${maps.length}`;
                         mapElem.classList.add("map-entry");
+
+                        const artistElem = document.createElement("span");
+                        artistElem.classList.add("map-artist");
+                        artistElem.textContent = artist;
+                        mapElem.appendChild(artistElem);
                         
                         const titleElem = document.createElement("span");
                         titleElem.classList.add("map-name");
-                        titleElem.textContent = `${artist} - ${title} [${version}]`;
+                        titleElem.textContent = title;
                         mapElem.appendChild(titleElem);
+
+                        const versionElem = document.createElement("span");
+                        versionElem.classList.add("map-version");
+                        versionElem.textContent = `${version}`;
+                        mapElem.appendChild(versionElem);
 
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
