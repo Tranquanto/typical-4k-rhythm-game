@@ -8,11 +8,14 @@
 export function getStarRating(hitObjects, speedMul = 1, diffSpikePrev = 10) {
     if (hitObjects.length === 0) return 0; // no objects = 0 stars
 
+    // calculate number of keys based on columns in hitObjects
+    const keys = Math.max(...hitObjects.map(o => o.column)) + 1;
+
     let difficulty = 0;
     let lastAddition = 0;
     let lastAddition2 = 0;
-    let lastColumns = Array(4).fill(-Infinity);
-    let inThisColumn = [0, 0];
+    let lastColumns = Array(9).fill(-Infinity);
+    let inThisColumn = [0, -1]; // [count, column]
     let lastDelta = Infinity;
 
     for (let i = 0; i < hitObjects.length; i++) {
@@ -24,15 +27,15 @@ export function getStarRating(hitObjects, speedMul = 1, diffSpikePrev = 10) {
             inThisColumn = [1, column];
         }
         const valid = isFinite(lastDelta);
-        const delta = ((hitObjects[i].time - (lastColumns[column] || -Infinity)) / speedMul + (valid ? lastDelta * diffSpikePrev : 0)) / (valid ? diffSpikePrev + 1 : 1); // time since last object (ms); first object is treated as free
+        const delta = ((hitObjects[i].time - (lastColumns[column] ?? -Infinity)) / speedMul + (valid ? lastDelta * diffSpikePrev : 0)) / (valid ? diffSpikePrev + 1 : 1); // time since last object (ms); first object is treated as free
         lastDelta = delta;
         if (delta === 0) {
             lastAddition2++;
             difficulty += lastAddition * lastAddition2 ** 3; // chord; more objects in chord = more difficult
         } else { // new time
             lastAddition2 = 0;
-            lastAddition = ((1 / (delta * Math.cbrt(inThisColumn[0]) + 1)) ** 2 * 1e5 + lastAddition * 3) / 4; // ultimate addition
-            difficulty += lastAddition ** 4;
+            lastAddition = ((1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3) / 4; // ultimate addition
+            difficulty += (lastAddition / 4 * keys) ** 4;
         }
         lastColumns[hitObjects[i].column] = hitObjects[i].time; // update last time for this column
     }

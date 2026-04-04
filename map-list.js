@@ -3,7 +3,20 @@ import { rand01 } from "../the-draconic-depths/js/perlin.js";
 import { getElementById } from "./getElementById.js"; // to prevent constantly calling document.getElementById
 
 export const game = {
-    speed: 1
+    speed: 1,
+    keys: 4
+};
+
+export const keybinds = {
+    1: [" "],
+    2: ["f", "j"],
+    3: ["f", " ", "j"],
+    4: ["d", "f", "j", "k"],
+    5: ["d", "f", " ", "j", "k"],
+    6: ["s", "d", "f", "j", "k", "l"],
+    7: ["s", "d", "f", " ", "j", "k", "l"],
+    8: ["a", "s", "d", "f", "j", "k", "l", ";"],
+    9: ["a", "s", "d", "f", " ", "j", "k", "l", ";"]
 };
 
 export const maps = [];
@@ -13,8 +26,8 @@ export function recalcStars() {
         const map = maps[i];
         const mapElem = getElementById(`map-${map.id}`);
         const diffElem = mapElem.querySelector(".map-difficulty");
-        const stars = map.getStars();
-        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, map.hitObjects.length, game.speed).toFixed(1)} max pp`;
+        const stars = map.getStars(game.keys);
+        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, map.hitObjects[game.keys].length, game.speed).toFixed(1)} max pp`;
         diffElem.style.color = getColor(stars);
     }
 }
@@ -106,38 +119,72 @@ getElementById("file-drop").addEventListener("change", e => {
                         const artist = lines.find(l => l.startsWith("Artist:")).split(":")[1].trim();
                         const version = lines.find(l => l.startsWith("Version:")).split(":")[1].trim();
                         const mode = lines.find(l => l.startsWith("Mode:")).split(":")[1].trim();
+                        
                         const useRandom = mode !== "3";
 
-                        const hitObjectsIndex = lines.findIndex(l => l === "[HitObjects]");
-                        const hitObjects = [...new Set(lines.slice(hitObjectsIndex + 1).map((l, i) => {
-                            const parts = l.split(",");
-                            const data = {
-                                column: useRandom ? [0, 1, 2, 3][Math.floor(rand01(1, 1, i, 57 + Number(parts[2])) * 4)] : Math.floor(Number(parts[0]) / 128),
-                                time: Number(parts[2])
-                            };
-                            return `${data.column},${data.time}`;
-                        }))].map(l => {
-                            const parts = l.split(",");
-                            return {
-                                column: Number(parts[0]),
-                                time: Number(parts[1])
-                            };
-                        });
+                        let timingPoints = [];
+                        const timingPointsIndex = lines.findIndex(l => l === "[TimingPoints]");
+                        if (timingPointsIndex !== -1) {
+                            const timingPointsLines = lines.slice(timingPointsIndex + 1);
+                            for (let i = 0; i < timingPointsLines.length; i++) {
+                                const line = timingPointsLines[i];
+                                if (line.trim().length === 0 || line.startsWith("[")) break;
 
-                        for (let i = 1; i < hitObjects.length; i++) {
-                            if (hitObjects[i].column === hitObjects[i - 1].column && useRandom) {
-                                hitObjects[i].column = [0, 1, 2, 3].filter(c => c !== hitObjects[i - 1].column)[Math.floor(rand01(1, 2, i, 57 + hitObjects[i].time) * 3)];
+                                const parts = line.split(",");
+                                const time = Number(parts[0]);
+                                const beatLength = Number(parts[1]);
+                                if (beatLength < 0) continue;
+
+                                timingPoints.push({time, beatLength});
                             }
                         }
 
-                        const hitObjectsPerSecond = {};
-                        for (let i = 0; i < hitObjects.length; i++) {
-                            const hitObject = hitObjects[i];
-                            const interval = Math.floor(hitObject.time / 1000);
-                            if (!hitObjectsPerSecond[interval]) {
-                                hitObjectsPerSecond[interval] = [];
+                        const hitObjectsIndex = lines.findIndex(l => l === "[HitObjects]");
+
+                        let perKey = {};
+                        let hitObjectsPerInterval = {};
+
+                        for (let keys = 1; keys <= 9; keys++) {
+                            const hitObjects = [...new Set(lines.slice(hitObjectsIndex + 1).map((l, i) => {
+                                const parts = l.split(",");
+                                const data = {
+                                    column: useRandom ?
+                                        Array.from(
+                                            {length: keys}, (_, idx) => idx
+                                        )[Math.floor(rand01(keys, 1, i, 57 + Number(parts[2])) * keys)]
+                                        : Math.max(Math.floor(
+                                            Number(parts[0]) / 512 * keys
+                                          - rand01(-5, 1, i, Number(parts[2]) - 93) * 0.5
+                                        ), 0),
+                                    time: Number(parts[2])
+                                };
+                                return `${data.column},${data.time}`;
+                            }))].map(l => {
+                                const parts = l.split(",");
+                                return {
+                                    column: Number(parts[0]),
+                                    time: Number(parts[1])
+                                };
+                            });
+
+                            if (keys > 1 && useRandom) for (let i = 1; i < hitObjects.length; i++) {
+                                if (hitObjects[i].column === hitObjects[i - 1].column) {
+                                    hitObjects[i].column = Array.from({length: keys}, (_, idx) => idx).filter(c => c !== hitObjects[i - 1].column)[Math.floor(rand01(keys, 2, i, 57 + hitObjects[i].time) * (keys - 1))];
+                                }
                             }
-                            hitObjectsPerSecond[interval].push(hitObject);
+
+                            const hitObjectsPerSecond = {};
+                            for (let i = 0; i < hitObjects.length; i++) {
+                                const hitObject = hitObjects[i];
+                                const interval = Math.floor(hitObject.time / 1000);
+                                if (!hitObjectsPerSecond[interval]) {
+                                    hitObjectsPerSecond[interval] = [];
+                                }
+                                hitObjectsPerSecond[interval].push(hitObject);
+                            }
+
+                            perKey[keys] = hitObjects;
+                            hitObjectsPerInterval[keys] = hitObjectsPerSecond;
                         }
 
                         const audioBlob = await zip.file(audioFile).async("blob");
@@ -157,8 +204,8 @@ getElementById("file-drop").addEventListener("change", e => {
 
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
-                        const stars = getStarRating(hitObjects, game.speed);
-                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, hitObjects.length, game.speed).toFixed(1)} max pp`;
+                        const stars = getStarRating(perKey[game.keys], game.speed);
+                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, perKey[game.keys].length, game.speed).toFixed(1)} max pp`;
                         diffElem.style.color = getColor(stars);
                         mapElem.appendChild(diffElem);
                         mapElem.setAttribute("data-id", maps.length);
@@ -169,20 +216,24 @@ getElementById("file-drop").addEventListener("change", e => {
                             artist,
                             version,
                             audio,
-                            hitObjects,
-                            hitObjectsPerInterval: hitObjectsPerSecond,
-                            getStars: () => getStarRating(hitObjects, game.speed)
+                            hitObjects: perKey,
+                            hitObjectsPerInterval,
+                            getStars: k => getStarRating(perKey[k], game.speed)
                         });
 
                         async function loadMap(e) { // start game
-                            const hitObjectsPerInterval = JSON.parse(JSON.stringify(hitObjectsPerSecond));
+                            const map = maps[Number(mapElem.getAttribute("data-id"))];
+
+                            const hitObjects = map.hitObjects[game.keys];
+                            const hitObjectsPerInterval = JSON.parse(JSON.stringify(map.hitObjectsPerInterval[game.keys]));
+                            const hitObjectsPerSecond = map.hitObjectsPerInterval[game.keys];
 
                             let auto = false;
                             if (e.ctrlKey) auto = true;
                             getElementById("map-list").style.display = "none";
                             getElementById("game").style.display = "";
 
-                            const hitsound = new Audio("hitnormal.wav");
+                            const hitsound = new Audio("hit.wav");
                             hitsound.volume = 0.5;
                             await hitsound.play();
                             hitsound.pause();
@@ -200,7 +251,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             const canvas = getElementById("game-canvas");
                             const ctx = canvas.getContext("2d");
                             function resize() {
-                                canvas.width = 400;
+                                canvas.width = 100 * game.keys;
                                 canvas.height = window.innerHeight;
                             }
                             window.addEventListener("resize", resize);
@@ -217,17 +268,19 @@ getElementById("file-drop").addEventListener("change", e => {
                             let pulses = [0, 0, 0, 0]; // pulse time per column
                             let completed = false;
 
+                            const maxStars = getStarRating(map.hitObjects[game.keys]); // speed is not included in these
+                            const maxPF = getPerformance(maxStars, 1, 0, map.hitObjects[game.keys].length);
+
                             document.onkeydown = e => {
                                 if (completed) return;
-                                const column = ["d", "f", "j", "k"].indexOf(e.key);
+                                const column = keybinds[game.keys]?.indexOf(e.key) ?? -1;
                                 if (!auto && column !== -1) {
                                     inputEvents.push({column, time: (performance.now() - startTime) * game.speed});
                                     hitsound.currentTime = 0;
                                     hitsound.play();
 
                                     draw(false);
-                                } else if (e.key === " ") {
-                                    console.log((performance.now() - startTime) * game.speed, hitObjects[0].time - approachTime - 1000);
+                                } else if (e.key === "Enter") {
                                     if (hits + misses === hitObjects.length) {
                                         // skip to results
                                         completed = true;
@@ -247,6 +300,24 @@ getElementById("file-drop").addEventListener("change", e => {
                             }
 
                             function draw(loop) {
+                                const currentTime = (performance.now() - startTime) * game.speed;
+
+                                // get last timing point
+                                let currentTimingPoint;
+                                for (let i = timingPoints.length - 1; i >= 0; i--) {
+                                    if (timingPoints[i].time <= currentTime) {
+                                        currentTimingPoint = timingPoints[i];
+                                        break;
+                                    }
+                                }
+                                if (!currentTimingPoint) currentTimingPoint = timingPoints[0];
+                                const currentBeat = (currentTime - currentTimingPoint.time) / currentTimingPoint.beatLength;
+                                // set background pulse opacity based on current beat
+                                let beatFraction = currentBeat % 1;
+                                // if (beatFraction < 0) beatFraction++;
+                                if (beatFraction >= 0) getElementById("background-pulse").style.opacity = 1 - Math.max(0, beatFraction);
+
+                                // process inputs
                                 for (const event of inputEvents) {
                                     const {column, time} = event;
                                     if (time / game.speed + startTime > performance.now()) continue;
@@ -276,21 +347,21 @@ getElementById("file-drop").addEventListener("change", e => {
                                                         getElementById("offset").textContent = `Avg. Error: ${(cumulativeOffset / hits).toFixed(2)} ms`;
                                                     }
                                                     if (absTimeDiff < 50) {
-                                                        score += 300 * (1 + combo / 25);
+                                                        // score += 300 * (1 + combo / 25);
                                                         combo++;
                                                         cumulativeAccuracy += 1;
 
                                                         getElementById("judgment").textContent = "Perfect";
                                                         getElementById("judgment").style.color = "#5ff";
                                                     } else if (absTimeDiff < 100) {
-                                                        score += 100 * (1 + combo / 25);
+                                                        // score += 100 * (1 + combo / 25);
                                                         combo++;
                                                         cumulativeAccuracy += 1 / 3;
 
                                                         getElementById("judgment").textContent = "Okay";
                                                         getElementById("judgment").style.color = "#5f5";
                                                     } else if (absTimeDiff < 150) {
-                                                        score += 50 * (1 + combo / 25);
+                                                        // score += 50 * (1 + combo / 25);
                                                         combo++;
                                                         cumulativeAccuracy += 1 / 6;
 
@@ -311,12 +382,11 @@ getElementById("file-drop").addEventListener("change", e => {
                                     }
                                 }
                                 inputEvents = inputEvents.filter(e => !e.processed);
-                                const currentTime = (performance.now() - startTime) * game.speed;
                                 const currentInterval = Math.floor(currentTime / 1000);
                                 canvas.width = canvas.width;
 
                                 // draw the columns
-                                for (let i = 0; i < 4; i++) {
+                                for (let i = 0; i < game.keys; i++) {
                                     ctx.fillStyle = "#33006d";
                                     ctx.fillRect(i * 100 + 2, 0, 96, canvas.height);
 
@@ -363,7 +433,6 @@ getElementById("file-drop").addEventListener("change", e => {
                                     }
                                 }
 
-                                getElementById("score").textContent = `Score: ${Math.floor(score)}`;
                                 getElementById("combo").textContent = `Combo: ${combo}`;
                                 getElementById("accuracy").textContent = `Accuracy: ${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
 
@@ -371,7 +440,10 @@ getElementById("file-drop").addEventListener("change", e => {
                                 const pf = getPerformance(stars, cumulativeAccuracy / (hits + misses) || 0, misses, hits + misses, game.speed);
                                 getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
 
-                                const stars2 = getStarRating((hitObjectsPerSecond[currentInterval - 1] || []).concat(hitObjectsPerSecond[currentInterval] || []).concat(hitObjectsPerSecond[currentInterval + 1] || []), game.speed, 2);
+                                score = pf / maxPF * 1e6 * stars / maxStars * (hits + misses) / hitObjects.length;
+                                getElementById("score").textContent = `${Math.floor(score).toLocaleString()}`;
+
+                                const stars2 = getStarRating(hitObjects.slice(Math.max(0, hits + misses - 15), hits + misses), game.speed, 2);
 
                                 getElementById("current-stars").textContent = `${stars2?.toFixed(2) || "0.00"}*`;
                                 getElementById("current-stars").style.color = getColor(stars2);
@@ -385,6 +457,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                     loop = false;
                                     getElementById("game").style.display = "none";
                                     getElementById("results").style.display = "";
+                                    getElementById("background-pulse").style.opacity = 0;
 
                                     getElementById("results-title").textContent = `${artist} - ${title} [${version}]`;
 
@@ -410,7 +483,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                     };
                                     getElementById("results-back-btn").onclick = () => {
                                         getElementById("results").style.display = "none";
-                                        getElementById("main-menu").style.display = "";
+                                        getElementById("map-list").style.display = "";
                                     };
                                 }
 
