@@ -75,7 +75,7 @@ export function getRank(accuracy, misses) {
     };
     let rank = "F";
     if (accuracy === 1) rank = "X";
-    else if (accuracy >= 0.95 && misses === 0) rank = "S";
+    else if (accuracy >= 0.95) rank = "S";
     else if (accuracy >= 0.9) rank = "A";
     else if (accuracy >= 0.8) rank = "B";
     else if (accuracy >= 0.7) rank = "C";

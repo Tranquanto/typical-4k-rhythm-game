@@ -4,7 +4,8 @@ import { getElementById } from "./getElementById.js"; // to prevent constantly c
 
 export const game = {
     speed: 1,
-    keys: 4
+    keys: 4,
+    offset: 0 // audio offset in ms
 };
 
 export const keybinds = {
@@ -191,8 +192,98 @@ getElementById("file-drop").addEventListener("change", e => {
 
                         const audioBlob = await zip.file(audioFile).async("blob");
                         const audioURL = URL.createObjectURL(audioBlob);
-                        const audio = new Audio(audioURL);
-                        audio.preservesPitch = false;
+
+                        const audioContext = new AudioContext();
+                        const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
+
+                        const audio = (() => {
+                            const duration = audioBuffer.duration;
+                            let source = null;
+                            let playing = false;
+                            let ended = true;
+                            let pausedAt = 0;
+                            let startedAtCtx = 0;
+                            let rate = 1;
+
+                            const clampTime = t => Math.max(0, Math.min(duration, t));
+
+                            const stopSource = () => {
+                                if (!source) return;
+                                source.onended = null;
+                                source.stop(0);
+                                source.disconnect();
+                                source = null;
+                            };
+
+                            const startSource = (offsetSec) => {
+                                stopSource();
+                                source = audioContext.createBufferSource();
+                                source.buffer = audioBuffer;
+                                source.playbackRate.value = rate;
+                                source.connect(audioContext.destination);
+
+                                startedAtCtx = audioContext.currentTime;
+                                pausedAt = clampTime(offsetSec);
+                                playing = true;
+                                ended = false;
+
+                                source.onended = () => {
+                                    if (!playing) return;
+                                    playing = false;
+                                    source = null;
+                                    pausedAt = duration;
+                                    ended = true;
+                                };
+
+                                source.start(0, pausedAt);
+                            };
+
+                            return {
+                                get playbackRate() {
+                                    return rate;
+                                },
+                                set playbackRate(v) {
+                                    const next = Math.max(0.01, Number(v) || 1);
+                                    if (next === rate) return;
+                                    const t = this.currentTime;
+                                    rate = next;
+                                    if (playing) startSource(t);
+                                },
+
+                                get currentTime() {
+                                    if (!playing) return clampTime(pausedAt);
+                                    return clampTime(pausedAt + (audioContext.currentTime - startedAtCtx) * rate);
+                                },
+                                set currentTime(value) {
+                                    const t = clampTime(Number(value) || 0);
+                                    pausedAt = t;
+                                    ended = t >= duration;
+                                    if (playing) startSource(t);
+                                },
+
+                                get ended() {
+                                    return ended || this.currentTime >= duration;
+                                },
+
+                                async play() {
+                                    await audioContext.resume();
+                                    if (playing) return;
+                                    if (pausedAt >= duration) pausedAt = 0;
+                                    startSource(pausedAt);
+                                },
+
+                                pause() {
+                                    if (!playing) return;
+                                    pausedAt = this.currentTime;
+                                    playing = false;
+                                    ended = false;
+                                    stopSource();
+                                }
+                            };
+                        })();
+
+                        // const audio = new Audio(audioURL);
+                        // audio.preservesPitch = false;
                         
                         // create the map element
                         const mapElem = document.createElement("div");
@@ -269,6 +360,12 @@ getElementById("file-drop").addEventListener("change", e => {
                             window.addEventListener("resize", resize);
                             resize();
 
+                            function now() {
+                                // if (performance.now() < startTime)
+                                return (performance.now() - startTime) * game.speed + game.offset;
+                                // return (audio.currentTime * 1000 ?? (performance.now() - startTime) * game.speed) + game.offset;
+                            }
+
                             let score = 0;
                             let combo = 0, maxCombo = 0;
                             let hits = 0;
@@ -287,20 +384,18 @@ getElementById("file-drop").addEventListener("change", e => {
                                 if (completed) return;
                                 const column = keybinds[game.keys]?.indexOf(e.key) ?? -1;
                                 if (!auto && column !== -1) {
-                                    inputEvents.push({column, time: (performance.now() - startTime) * game.speed});
+                                    inputEvents.push({column, time: now(), hitsoundPlayed: true});
                                     hitsound.currentTime = 0;
                                     hitsound.play();
 
-                                    draw(false);
                                 } else if (e.key === "Enter") {
                                     if (hits + misses === hitObjects.length) {
                                         // skip to results
                                         completed = true;
-                                    } else if (hits + misses === 0 && (performance.now() - startTime) * game.speed < hitObjects[0].time - approachTime - 1000) {
+                                    } else if (hits + misses === 0 && now() < hitObjects[0].time - approachTime - 1000) {
                                         // skip to first object
                                         audio.currentTime = (hitObjects[0].time - approachTime - 1000) / 1000;
                                         startTime = performance.now() - ((hitObjects[0].time - approachTime) - 1000) / game.speed;
-                                        draw(false);
                                     }
                                 }
                             };
@@ -312,7 +407,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             }
 
                             function draw(loop) {
-                                const currentTime = (performance.now() - startTime) * game.speed;
+                                const currentTime = now();
 
                                 // get last timing point
                                 let currentTimingPoint;
@@ -352,8 +447,12 @@ getElementById("file-drop").addEventListener("change", e => {
                                                 if (absTimeDiff < 200) {
                                                     if (absTimeDiff < 150) {
                                                         hits++;
-                                                        hitsound.currentTime = 0;
-                                                        hitsound.play();
+
+                                                        if (!event.hitsoundPlayed) {
+                                                            hitsound.currentTime = 0;
+                                                            hitsound.play();
+                                                            event.hitsoundPlayed = true;
+                                                        }
 
                                                         cumulativeOffset += timeDiff;
                                                         getElementById("offset").textContent = `Avg. Error: ${(cumulativeOffset / hits).toFixed(2)} ms`;
