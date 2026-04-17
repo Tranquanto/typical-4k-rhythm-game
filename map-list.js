@@ -8,6 +8,15 @@ export const game = {
     offset: 0 // audio offset in ms
 };
 
+export const judgments = [
+    {name: "Perfect", color: "#55f", mult: 1, window: 20},
+    {name: "Great", color: "#5ff", mult: 0.8, window: 50},
+    {name: "Good", color: "#5f5", mult: 0.5, window: 80},
+    {name: "Okay", color: "#ff5", mult: 0.2, window: 120},
+    {name: "Bad", color: "#fa5", mult: 0.1, window: 150},
+    {name: "Miss", color: "#f55", mult: 0, window: 200}
+];
+
 export const keybinds = {
     1: [" "],
     2: ["f", "j"],
@@ -191,7 +200,6 @@ getElementById("file-drop").addEventListener("change", e => {
                         }
 
                         const audioBlob = await zip.file(audioFile).async("blob");
-                        const audioURL = URL.createObjectURL(audioBlob);
 
                         const audioContext = new AudioContext();
                         const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
@@ -312,6 +320,28 @@ getElementById("file-drop").addEventListener("change", e => {
                         diffElem.style.color = getColor(stars);
                         mapElem.appendChild(diffElem);
                         mapElem.setAttribute("data-id", maps.length);
+
+                        const difficultyBar = document.createElement("div");
+                        difficultyBar.classList.add("map-difficulty-bar");
+
+                        const diffsPerHitObject = perKey[game.keys].map((h, i) => [getStarRating(perKey[game.keys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[game.keys].length)), game.speed, 0), h.time]);
+                        const maxTime = perKey[game.keys].length ? perKey[game.keys][perKey[game.keys].length - 1].time : 0;
+                        // build a gradient
+                        const gradient = document.createElement("canvas");
+                        gradient.width = 1000;
+                        gradient.height = 8;
+                        const gctx = gradient.getContext("2d");
+                        const grad = gctx.createLinearGradient(0, 0, gradient.width, 0);
+                        let last = 0;
+                        for (let i = 0; i < diffsPerHitObject.length; i++) {
+                            const [diff, time] = diffsPerHitObject[i];
+                            grad.addColorStop(time / maxTime, getColor((diff + last * 3) / 4));
+                            last = diff;
+                        }
+                        gctx.fillStyle = grad;
+                        gctx.fillRect(0, 0, gradient.width, gradient.height);
+                        difficultyBar.style.backgroundImage = `url(${gradient.toDataURL()})`;
+                        mapElem.appendChild(difficultyBar);
 
                         maps.push({
                             id: maps.length,
@@ -439,14 +469,23 @@ getElementById("file-drop").addEventListener("change", e => {
                                         }
                                     }
                                     if (hitObjects) {
-                                        for (let i = 0; i < hitObjects.length; i++) {
+                                        outer: for (let i = 0; i < hitObjects.length; i++) {
                                             const hitObject = hitObjects[i];
                                             if (hitObject.column === column) {
                                                 const timeDiff = hitObject.time - time; // negative = late
                                                 const absTimeDiff = Math.abs(timeDiff);
-                                                if (absTimeDiff < 200) {
-                                                    if (absTimeDiff < 150) {
+                                                for (let j = 0; j < judgments.length; j++) {
+                                                    const judgment = judgments[j];
+                                                    if (absTimeDiff > judgment.window) continue;
+
+                                                    document.getElementById("judgment").textContent = judgment.name;
+                                                    document.getElementById("judgment").style.color = judgment.color;
+
+                                                    cumulativeAccuracy += judgment.mult;
+
+                                                    if (judgment.name !== "Miss") {
                                                         hits++;
+                                                        combo++;
 
                                                         if (!event.hitsoundPlayed) {
                                                             hitsound.currentTime = 0;
@@ -456,37 +495,12 @@ getElementById("file-drop").addEventListener("change", e => {
 
                                                         cumulativeOffset += timeDiff;
                                                         getElementById("offset").textContent = `Avg. Error: ${(cumulativeOffset / hits).toFixed(2)} ms`;
-                                                    }
-                                                    if (absTimeDiff < 50) {
-                                                        // score += 300 * (1 + combo / 25);
-                                                        combo++;
-                                                        cumulativeAccuracy += 1;
-
-                                                        getElementById("judgment").textContent = "Perfect";
-                                                        getElementById("judgment").style.color = "#5ff";
-                                                    } else if (absTimeDiff < 100) {
-                                                        // score += 100 * (1 + combo / 25);
-                                                        combo++;
-                                                        cumulativeAccuracy += 1 / 3;
-
-                                                        getElementById("judgment").textContent = "Okay";
-                                                        getElementById("judgment").style.color = "#5f5";
-                                                    } else if (absTimeDiff < 150) {
-                                                        // score += 50 * (1 + combo / 25);
-                                                        combo++;
-                                                        cumulativeAccuracy += 1 / 6;
-
-                                                        getElementById("judgment").textContent = "Bad";
-                                                        getElementById("judgment").style.color = "#ff5";
-                                                    } else { // extremely early
+                                                    } else {
                                                         misses++;
                                                         combo = 0;
-
-                                                        getElementById("judgment").textContent = "Miss";
-                                                        getElementById("judgment").style.color = "#f55";
                                                     }
                                                     hitObjects.splice(i, 1);
-                                                    break;
+                                                    break outer;
                                                 }
                                             }
                                         }

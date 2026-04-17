@@ -103,6 +103,11 @@ button {
     margin-bottom: 6px;
 }
 
+.map-difficulty-bar {
+    height: 8px;
+    margin-top: 8px;
+}
+
 #file-drop {
     opacity: 0;
     display: block;
