@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Typical 4-Key Rhythm Game</title>
+    <title>Pulse</title>
     <link href="styles.css" rel="stylesheet">
     <script src="jszip.js"></script>
 
-    <meta property="og:title" content="Typical 4-Key Rhythm Game">
-    <meta property="og:site_name" content="Typical 4-Key Rhythm Game">
+    <meta property="og:title" content="Pulse">
+    <meta property="og:site_name" content="Pulse">
     <meta property="og:url" content="https://tranquanto.github.io/typical-4k-rhythm-game/">
-    <meta property="og:description" content="A simple 4-key rhythm game designed for the web, inspired by games like osu!mania and Quaver. It supports .osz file imports (only, currently). This was initially made solely for a simple star rating and performance calculator.">
+    <meta property="og:description" content="A simple vertical-scrolling 4-key rhythm game designed for the web, inspired by games like osu!mania and Quaver. It supports .osz file imports (only, currently). This was initially made solely for a simple star rating and performance calculator.">
 </head>
 <body>
     <div id="background-pulse" style="opacity: 0;"></div>
@@ -19,7 +19,7 @@
         <input type="file" id="file-drop" accept=".osz" multiple>
     </label>
     <div id="main-menu">
-        <span id="title">Typical 4-Key Rhythm Game</span><br>
+        <span id="title">Pulse</span><br>
         <button id="play-btn">Play</button>
     </div>
     <div id="map-list" style="display: none;">
@@ -37,10 +37,10 @@
         </div>
     </div>
     <div id="game" style="display: none;">
-        <span id="score">0</span>
+        <span id="score" data-value="0">0</span>
         <div id="stats">
             <span id="combo">Combo: 0</span><br>
-            <span id="accuracy">Accuracy: 0%</span><br>
+            <span id="accuracy">Accuracy: 100.00%</span><br>
             <div id="top-middle">
                 <span id="current-stars">0.00*</span> |
                 <span id="cumulative-stars">0.00*</span><br>
@@ -50,6 +50,12 @@
             </div>
         </div>
         <canvas id="game-canvas"></canvas>
+        <div id="pause-overlay" style="display: none;">
+            <span>Paused</span>
+            <button id="pause-resume-btn">Resume</button>
+            <button id="pause-retry-btn">Retry</button>
+            <button id="pause-menu-btn">Return to Menu</button>
+        </div>
     </div>
     <div id="results" style="display: none;">
         <span id="results-title">Map Name</span>

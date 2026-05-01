@@ -1,16 +1,17 @@
-import { getPerformance, getRank, getStarRating } from "./calculator.js";
+import { getPerformance, getRank, getStarRating, lerp } from "./calculator.js";
 import { rand01 } from "./rand01.js";
 import { getElementById } from "./getElementById.js"; // to prevent constantly calling document.getElementById
 
 export const game = {
-    speed: 1,
+    mode: "keys",
     keys: 4,
+    speed: 1,
     offset: 0 // audio offset in ms
 };
 
 export const judgments = [
     {name: "Perfect", color: "#55f", mult: 1, window: 20},
-    {name: "Great", color: "#5ff", mult: 0.8, window: 50},
+    {name: "Great", color: "#5ff", mult: 0.98, window: 50},
     {name: "Good", color: "#5f5", mult: 0.5, window: 80},
     {name: "Okay", color: "#ff5", mult: 0.2, window: 120},
     {name: "Bad", color: "#fa5", mult: 0.1, window: 150},
@@ -26,7 +27,8 @@ export const keybinds = {
     6: ["s", "d", "f", "j", "k", "l"],
     7: ["s", "d", "f", " ", "j", "k", "l"],
     8: ["a", "s", "d", "f", "j", "k", "l", ";"],
-    9: ["a", "s", "d", "f", " ", "j", "k", "l", ";"]
+    9: ["a", "s", "d", "f", " ", "j", "k", "l", ";"],
+    10: ["a", "s", "d", "f", "v", "n", "j", "k", "l", ";"]
 };
 
 export const maps = [];
@@ -37,7 +39,7 @@ export function recalcStars() {
         const mapElem = getElementById(`map-${map.id}`);
         const diffElem = mapElem.querySelector(".map-difficulty");
         const stars = map.getStars(game.keys);
-        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, map.hitObjects[game.keys].length, game.speed).toFixed(1)} max pp`;
+        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(game.mode, stars, 1, 0, map.hitObjects[game.keys].length, game.speed).toFixed(1)} max pp`;
         diffElem.style.color = getColor(stars);
     }
 }
@@ -315,8 +317,8 @@ getElementById("file-drop").addEventListener("change", e => {
 
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
-                        const stars = getStarRating(perKey[game.keys], game.speed);
-                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(stars, 1, 0, perKey[game.keys].length, game.speed).toFixed(1)} max pp`;
+                        const stars = getStarRating(game.mode, perKey[game.keys], game.speed);
+                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(game.mode, stars, 1, 0, perKey[game.keys].length, game.speed).toFixed(1)} max pp`;
                         diffElem.style.color = getColor(stars);
                         mapElem.appendChild(diffElem);
                         mapElem.setAttribute("data-id", maps.length);
@@ -324,7 +326,7 @@ getElementById("file-drop").addEventListener("change", e => {
                         const difficultyBar = document.createElement("div");
                         difficultyBar.classList.add("map-difficulty-bar");
 
-                        const diffsPerHitObject = perKey[game.keys].map((h, i) => [getStarRating(perKey[game.keys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[game.keys].length)), game.speed, 0), h.time]);
+                        const diffsPerHitObject = perKey[game.keys].map((h, i) => [getStarRating(game.mode, perKey[game.keys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[game.keys].length)), 1, 0), h.time]);
                         const maxTime = perKey[game.keys].length ? perKey[game.keys][perKey[game.keys].length - 1].time : 0;
                         // build a gradient
                         const gradient = document.createElement("canvas");
@@ -351,7 +353,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             audio,
                             hitObjects: perKey,
                             hitObjectsPerInterval,
-                            getStars: k => getStarRating(perKey[k], game.speed)
+                            getStars: k => getStarRating(game.mode, perKey[k], game.speed)
                         });
 
                         async function loadMap(e) { // start game
@@ -391,42 +393,54 @@ getElementById("file-drop").addEventListener("change", e => {
                             resize();
 
                             function now() {
-                                // if (performance.now() < startTime)
+                                if (performance.now() < startTime)
                                 return (performance.now() - startTime) * game.speed + game.offset;
-                                // return (audio.currentTime * 1000 ?? (performance.now() - startTime) * game.speed) + game.offset;
+                                return (audio.currentTime * 1000 ?? (performance.now() - startTime) * game.speed) + game.offset;
                             }
 
-                            let score = 0;
+                            let score = 0, scoreDisplay = 0;
                             let combo = 0, maxCombo = 0;
                             let hits = 0;
                             let misses = 0;
-                            let cumulativeAccuracy = 0;
+                            let cumulativeAccuracy = 0, accuracyDisplay = 100;
                             let cumulativeOffset = 0;
                             let approachTime = 800 * game.speed;
                             let inputEvents = [];
                             let pulses = [0, 0, 0, 0]; // pulse time per column
-                            let completed = false;
+                            let completed = false, paused = false;
 
-                            const maxStars = getStarRating(map.hitObjects[game.keys]); // speed is not included in these
-                            const maxPF = getPerformance(maxStars, 1, 0, map.hitObjects[game.keys].length);
+                            const maxStars = getStarRating(game.mode, map.hitObjects[game.keys]); // speed is not included in these
+                            const maxPF = getPerformance(game.mode, maxStars, 1, 0, map.hitObjects[game.keys].length);
 
-                            document.onkeydown = e => {
-                                if (completed) return;
+                            document.onkeydown = async e => {
+                                if (completed || e.repeat) return;
                                 const column = keybinds[game.keys]?.indexOf(e.key) ?? -1;
-                                if (!auto && column !== -1) {
+                                let canSkip = false;
+                                if (hits + misses === hitObjects.length) canSkip = 1;
+                                else if (hits + misses === 0 && now() < hitObjects[0].time - approachTime - 2000) canSkip = 2;
+
+                                if (!auto && column !== -1 && !paused && !canSkip) {
                                     inputEvents.push({column, time: now(), hitsoundPlayed: true});
                                     hitsound.currentTime = 0;
                                     hitsound.play();
-
-                                } else if (e.key === "Enter") {
-                                    if (hits + misses === hitObjects.length) {
+                                } else if (e.key === " " && canSkip) {
+                                    if (canSkip === 1) {
                                         // skip to results
                                         completed = true;
-                                    } else if (hits + misses === 0 && now() < hitObjects[0].time - approachTime - 1000) {
+                                    } else if (canSkip === 2) {
                                         // skip to first object
                                         audio.currentTime = (hitObjects[0].time - approachTime - 1000) / 1000;
                                         startTime = performance.now() - ((hitObjects[0].time - approachTime) - 1000) / game.speed;
                                     }
+                                } else if (e.key === "Escape") {
+                                    if (paused) {
+                                        await audio.play();
+                                        paused = false;
+                                    } else {
+                                        audio.pause();
+                                        paused = true;
+                                    }
+                                    getElementById("pause-overlay").style.display = paused ? "" : "none";
                                 }
                             };
 
@@ -478,8 +492,8 @@ getElementById("file-drop").addEventListener("change", e => {
                                                     const judgment = judgments[j];
                                                     if (absTimeDiff > judgment.window) continue;
 
-                                                    document.getElementById("judgment").textContent = judgment.name;
-                                                    document.getElementById("judgment").style.color = judgment.color;
+                                                    getElementById("judgment").textContent = judgment.name;
+                                                    getElementById("judgment").style.color = judgment.color;
 
                                                     cumulativeAccuracy += judgment.mult;
 
@@ -560,16 +574,18 @@ getElementById("file-drop").addEventListener("change", e => {
                                 }
 
                                 getElementById("combo").textContent = `Combo: ${combo}`;
-                                getElementById("accuracy").textContent = `Accuracy: ${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
+                                accuracyDisplay = lerp(accuracyDisplay, hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : 100, 0.1);
+                                getElementById("accuracy").textContent = `Accuracy: ${accuracyDisplay.toFixed(2)}%`;
 
-                                const stars = getStarRating(hitObjects.slice(0, hits + misses), game.speed);
-                                const pf = getPerformance(stars, cumulativeAccuracy / (hits + misses) || 0, misses, hits + misses, game.speed);
+                                const stars = getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed);
+                                const pf = getPerformance(game.mode, stars, cumulativeAccuracy / (hits + misses) || 0, misses, hits + misses, game.speed);
                                 getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
 
                                 score = pf / maxPF * 1e6 * stars / maxStars * (hits + misses) / hitObjects.length;
-                                getElementById("score").textContent = `${Math.floor(score).toLocaleString()}`;
+                                scoreDisplay = lerp(scoreDisplay, score, 0.1);
+                                getElementById("score").textContent = `${Math.round(scoreDisplay).toLocaleString()}`;
 
-                                const stars2 = getStarRating(hitObjects.slice(Math.max(0, hits + misses - 15), hits + misses), game.speed, 2);
+                                const stars2 = getStarRating(game.mode, hitObjects.slice(Math.max(0, hits + misses - 15), hits + misses), game.speed, 1);
 
                                 getElementById("current-stars").textContent = `${stars2?.toFixed(2) || "0.00"}*`;
                                 getElementById("current-stars").style.color = getColor(stars2);
@@ -587,15 +603,15 @@ getElementById("file-drop").addEventListener("change", e => {
 
                                     getElementById("results-title").textContent = `${artist} - ${title} [${version}]`;
 
-                                    getElementById("results-difficulty").textContent = `${getStarRating(hitObjects, game.speed).toFixed(2)}*`;
-                                    getElementById("results-difficulty").style.color = getColor(getStarRating(hitObjects, game.speed));
+                                    getElementById("results-difficulty").textContent = `${getStarRating(game.mode, hitObjects, game.speed).toFixed(2)}*`;
+                                    getElementById("results-difficulty").style.color = getColor(getStarRating(game.mode, hitObjects, game.speed));
 
                                     const rank = getRank(cumulativeAccuracy / (hits + misses) || 0, misses);
-                                    getElementById("results-rank").textContent = `${rank.rank.replace("X", "SS")}`;
+                                    getElementById("results-rank").textContent = `${rank.rank}`;
                                     getElementById("results-rank").style.setProperty("--rank-color", rank.color);
                                     getElementById("results-rank").style.setProperty("--rank-glow", /[SX]/.test(rank.rank) ? "8px" : "0");
 
-                                    getElementById("results-score").textContent = `${Math.floor(score).toLocaleString()}`;
+                                    getElementById("results-score").textContent = `${Math.round(score).toLocaleString()}`;
                                     
                                     getElementById("results-max-combo").textContent = `${maxCombo}x`;
                                     getElementById("results-accuracy").textContent = `${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
@@ -628,3 +644,4 @@ getElementById("file-drop").addEventListener("change", e => {
         reader.readAsArrayBuffer(file);
     }
 });
+window.maps = maps;
