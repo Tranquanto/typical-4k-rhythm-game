@@ -1,4 +1,4 @@
-import { getPerformance, getRank, getStarRating, lerp } from "./calculator.js";
+import { getPerformance, getRank, getStarRating, lerp, modify } from "./calculator.js";
 import { rand01 } from "./rand01.js";
 import { getElementById } from "./getElementById.js"; // to prevent constantly calling document.getElementById
 
@@ -6,7 +6,8 @@ export const game = {
     mode: "keys",
     keys: 4,
     speed: 1,
-    offset: 0 // audio offset in ms
+    offset: 0, // audio offset in ms
+    mods: new Set()
 };
 
 export const judgments = [
@@ -15,7 +16,7 @@ export const judgments = [
     {name: "Good", color: "#5f5", mult: 0.5, window: 80},
     {name: "Okay", color: "#ff5", mult: 0.2, window: 120},
     {name: "Bad", color: "#fa5", mult: 0.1, window: 150},
-    {name: "Miss", color: "#f55", mult: 0, window: 200}
+    {name: "Miss", color: "#f55", mult: 0, window: 250}
 ];
 
 export const keybinds = {
@@ -31,14 +32,16 @@ export const keybinds = {
     10: ["a", "s", "d", "f", "v", "n", "j", "k", "l", ";"]
 };
 
+const keysPressed = {};
+
 export const maps = [];
 
-export function recalcStars() {
+export function recalcStars(mods = game.mods) {
     for (let i = 0; i < maps.length; i++) {
         const map = maps[i];
         const mapElem = getElementById(`map-${map.id}`);
         const diffElem = mapElem.querySelector(".map-difficulty");
-        const stars = map.getStars(game.keys);
+        const stars = map.getStars(game.keys, mods);
         diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(game.mode, stars, 1, 0, map.hitObjects[game.keys].length, game.speed).toFixed(1)} max pp`;
         diffElem.style.color = getColor(stars);
     }
@@ -170,16 +173,19 @@ getElementById("file-drop").addEventListener("change", e => {
                                             Number(parts[0]) / 512 * keys
                                           - (originalKeys === keys ? rand01(-5, 1, i, Number(parts[2]) - 93) * 0.5 : 0)
                                         ), 0),
-                                    time: Number(parts[2])
+                                    time: Number(parts[2]),
+                                    type: 0 // standard, short-hit note
                                 };
-                                return `${data.column},${data.time}`;
-                            }))].map(l => {
-                                const parts = l.split(",");
-                                return {
-                                    column: Number(parts[0]),
-                                    time: Number(parts[1])
-                                };
-                            });
+
+                                if (parts[5]?.split(":")[0] !== "0" && parts[3] === "128") {
+                                    parts[5] = parts[5].split(":")[0];
+                                    data.type = 1; // long/hold note
+                                    data.end = Number(parts[5]);
+                                }
+
+                                return data;
+                            }))] // check for duplicates and remove
+                            .filter((v, i, s) => s.findIndex(d => d.column === v.column && d.time === v.time) === i);
 
                             if (keys > 1 && useRandom) for (let i = 1; i < hitObjects.length; i++) {
                                 if (hitObjects[i].column === hitObjects[i - 1].column) {
@@ -190,11 +196,16 @@ getElementById("file-drop").addEventListener("change", e => {
                             const hitObjectsPerSecond = {};
                             for (let i = 0; i < hitObjects.length; i++) {
                                 const hitObject = hitObjects[i];
-                                const interval = Math.floor(hitObject.time / 1000);
-                                if (!hitObjectsPerSecond[interval]) {
-                                    hitObjectsPerSecond[interval] = [];
+                                function add(interval) {
+                                    if (interval < 0 || isNaN(interval)) return;
+                                    if (!hitObjectsPerSecond[interval]) {
+                                        hitObjectsPerSecond[interval] = [];
+                                    }
+                                    hitObjectsPerSecond[interval].push(hitObject);
                                 }
-                                hitObjectsPerSecond[interval].push(hitObject);
+
+                                add(Math.floor(hitObject.time / 1000));
+                                // add(Math.floor(hitObject.end / 1000));
                             }
 
                             perKey[keys] = hitObjects;
@@ -230,7 +241,8 @@ getElementById("file-drop").addEventListener("change", e => {
                                 source = audioContext.createBufferSource();
                                 source.buffer = audioBuffer;
                                 source.playbackRate.value = rate;
-                                source.connect(audioContext.destination);
+                                source.connect(gainNode);
+                                gainNode.connect(audioContext.destination);
 
                                 startedAtCtx = audioContext.currentTime;
                                 pausedAt = clampTime(offsetSec);
@@ -247,6 +259,8 @@ getElementById("file-drop").addEventListener("change", e => {
 
                                 source.start(0, pausedAt);
                             };
+
+                            const gainNode = audioContext.createGain();
 
                             return {
                                 get playbackRate() {
@@ -288,6 +302,10 @@ getElementById("file-drop").addEventListener("change", e => {
                                     playing = false;
                                     ended = false;
                                     stopSource();
+                                },
+
+                                set volume(value) {
+                                    gainNode.gain.value = value;
                                 }
                             };
                         })();
@@ -317,7 +335,7 @@ getElementById("file-drop").addEventListener("change", e => {
 
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
-                        const stars = getStarRating(game.mode, perKey[game.keys], game.speed);
+                        const stars = getStarRating(game.mode, perKey[game.keys], game.speed, undefined, game.mods);
                         diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(game.mode, stars, 1, 0, perKey[game.keys].length, game.speed).toFixed(1)} max pp`;
                         diffElem.style.color = getColor(stars);
                         mapElem.appendChild(diffElem);
@@ -353,15 +371,24 @@ getElementById("file-drop").addEventListener("change", e => {
                             audio,
                             hitObjects: perKey,
                             hitObjectsPerInterval,
-                            getStars: k => getStarRating(game.mode, perKey[k], game.speed)
+                            getStars: k => getStarRating(game.mode, perKey[k], game.speed, undefined, game.mods)
                         });
 
                         async function loadMap(e) { // start game
                             const map = maps[Number(mapElem.getAttribute("data-id"))];
 
-                            const hitObjects = map.hitObjects[game.keys];
+                            const hitObjects = [...map.hitObjects[game.keys]];
+
+                            for (let i = 0; i < hitObjects.length; i++) {
+                                hitObjects[i] = {...hitObjects[i]}; // create a copy of each hit object so that mods can modify them without affecting the original map data
+                            }
+
                             const hitObjectsPerInterval = JSON.parse(JSON.stringify(map.hitObjectsPerInterval[game.keys]));
-                            const hitObjectsPerSecond = map.hitObjectsPerInterval[game.keys];
+
+                            modify(hitObjects, game.mods);
+                            for (const i in hitObjectsPerInterval) {
+                                modify(hitObjectsPerInterval[i], game.mods);
+                            }
 
                             let auto = false;
                             if (e.ctrlKey) auto = true;
@@ -376,6 +403,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             await audio.play();
                             audio.pause();
                             audio.playbackRate = game.speed;
+                            audio.volume = game.volume ?? 1;
                             let startTime = performance.now() + 1000;
                             setTimeout(async () => {
                                 await audio.play();
@@ -402,19 +430,23 @@ getElementById("file-drop").addEventListener("change", e => {
                             let combo = 0, maxCombo = 0;
                             let hits = 0;
                             let misses = 0;
-                            let cumulativeAccuracy = 0, accuracyDisplay = 100;
+                            let cumulativeAccuracy = 0, accuracyDisplay = 100, totalAccuracy = 0;
                             let cumulativeOffset = 0;
                             let approachTime = 800 * game.speed;
                             let inputEvents = [];
                             let pulses = [0, 0, 0, 0]; // pulse time per column
                             let completed = false, paused = false;
+                            let startedNotes = new Set();
 
                             const maxStars = getStarRating(game.mode, map.hitObjects[game.keys]); // speed is not included in these
                             const maxPF = getPerformance(game.mode, maxStars, 1, 0, map.hitObjects[game.keys].length);
 
                             document.onkeydown = async e => {
+                                const k = e.key.toLowerCase();
+                                keysPressed[k] = true;
+
                                 if (completed || e.repeat) return;
-                                const column = keybinds[game.keys]?.indexOf(e.key) ?? -1;
+                                const column = keybinds[game.keys]?.indexOf(k) ?? -1;
                                 let canSkip = false;
                                 if (hits + misses === hitObjects.length) canSkip = 1;
                                 else if (hits + misses === 0 && now() < hitObjects[0].time - approachTime - 2000) canSkip = 2;
@@ -423,7 +455,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                     inputEvents.push({column, time: now(), hitsoundPlayed: true});
                                     hitsound.currentTime = 0;
                                     hitsound.play();
-                                } else if (e.key === " " && canSkip) {
+                                } else if (k === " " && canSkip) {
                                     if (canSkip === 1) {
                                         // skip to results
                                         completed = true;
@@ -432,7 +464,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                         audio.currentTime = (hitObjects[0].time - approachTime - 1000) / 1000;
                                         startTime = performance.now() - ((hitObjects[0].time - approachTime) - 1000) / game.speed;
                                     }
-                                } else if (e.key === "Escape") {
+                                } else if (k === "escape") {
                                     if (paused) {
                                         await audio.play();
                                         paused = false;
@@ -444,9 +476,24 @@ getElementById("file-drop").addEventListener("change", e => {
                                 }
                             };
 
+                            document.onkeyup = e => {
+                                const k = e.key.toLowerCase();
+                                keysPressed[k] = false;
+
+                                if (completed || e.repeat) return;
+                                const column = keybinds[game.keys]?.indexOf(k) ?? -1;
+
+                                if (!auto && column !== -1 && !paused) {
+                                    inputEvents.push({column, time: now(), hitsoundPlayed: true, release: true});
+                                }
+                            };
+
                             if (auto) {
                                 for (const hitObject of hitObjects) {
                                     inputEvents.push({column: hitObject.column, time: hitObject.time});
+                                    if (hitObject.type === 1) {
+                                        inputEvents.push({column: hitObject.column, time: hitObject.end, release: true});
+                                    }
                                 }
                             }
 
@@ -474,34 +521,35 @@ getElementById("file-drop").addEventListener("change", e => {
                                     if (time / game.speed + startTime > performance.now()) continue;
                                     event.processed = true;
                                     const interval = Math.floor(time / 1000);
-                                    let hitObjects;
-                                    pulses[column] = time;
-                                    for (let i = Math.floor(interval - game.speed); i < interval + 2 * game.speed; i++) {
-                                        if (hitObjectsPerInterval[i]?.length) {
-                                            hitObjects = hitObjectsPerInterval[i];
-                                            break;
-                                        }
-                                    }
-                                    if (hitObjects) {
-                                        outer: for (let i = 0; i < hitObjects.length; i++) {
-                                            const hitObject = hitObjects[i];
+                                    let processed = false;
+                                    let isRelease = event.release;
+                                    if (!isRelease) pulses[column] = time;
+
+                                    for (let i = Math.floor(interval - game.speed); i < interval + 2 * game.speed && !processed; i++) {
+                                        const intervalNotes = (hitObjectsPerInterval[i] || []).concat(isRelease ? Array.from(startedNotes) : []);
+                                        if (!intervalNotes) continue;
+
+                                        outer: for (let j = 0; j < intervalNotes.length; j++) {
+                                            const hitObject = intervalNotes[j];
+                                            if (hitObject.done || isRelease && !hitObject.started) continue;
                                             if (hitObject.column === column) {
-                                                const timeDiff = hitObject.time - time; // negative = late
+                                                const timeDiff = (isRelease ? hitObject.end : hitObject.time) - time; // negative = late
                                                 const absTimeDiff = Math.abs(timeDiff);
-                                                for (let j = 0; j < judgments.length; j++) {
-                                                    const judgment = judgments[j];
-                                                    if (absTimeDiff > judgment.window) continue;
+                                                for (let k = 0; k < judgments.length; k++) {
+                                                    const judgment = judgments[k];
+                                                    if (absTimeDiff > judgment.window && !(judgment.name === "Miss" && isRelease)) continue;
 
                                                     getElementById("judgment").textContent = judgment.name;
                                                     getElementById("judgment").style.color = judgment.color;
 
                                                     cumulativeAccuracy += judgment.mult;
+                                                    totalAccuracy++;
 
                                                     if (judgment.name !== "Miss") {
-                                                        hits++;
+                                                        if (!isRelease) hits++;
                                                         combo++;
 
-                                                        if (!event.hitsoundPlayed) {
+                                                        if (!event.hitsoundPlayed && !isRelease) {
                                                             hitsound.currentTime = 0;
                                                             hitsound.play();
                                                             event.hitsoundPlayed = true;
@@ -512,9 +560,22 @@ getElementById("file-drop").addEventListener("change", e => {
                                                     } else {
                                                         misses++;
                                                         combo = 0;
+                                                        totalAccuracy++;
                                                     }
-                                                    hitObjects.splice(i, 1);
-                                                    break outer;
+                                                    if (hitObject.type === 0) {
+                                                        hitObject.done = 2;
+                                                    } else if (hitObject.type === 1) {
+                                                        if (isRelease) {
+                                                            hitObject.done = 2;
+                                                            startedNotes.delete(hitObject);
+                                                        } else {
+                                                            hitObject.started = true;
+                                                            startedNotes.add(hitObject);
+                                                        }
+                                                    }
+                                                    processed = true;
+                                                    if (!isRelease) break outer;
+                                                    else break;
                                                 }
                                             }
                                         }
@@ -547,24 +608,36 @@ getElementById("file-drop").addEventListener("change", e => {
                                 }
 
                                 for (let i = Math.floor(currentInterval - game.speed); i < currentInterval + 3 * game.speed; i++) {
-                                    const hitObjects = hitObjectsPerInterval[i];
+                                    const hitObjects = (hitObjectsPerInterval[i] || []).concat(Array.from(startedNotes));
                                     if (hitObjects) {
                                         for (let j = 0; j < hitObjects.length; j++) {
                                             const hitObject = hitObjects[j];
+                                            if (hitObject.done) continue;
                                             const timeUntilHit = hitObject.time - currentTime;
                                             const y = canvas.height - (timeUntilHit / approachTime) * canvas.height - 160;
-                                            ctx.fillStyle = "#b574ff";
-                                            ctx.fillRect(hitObject.column * 100 + 2, y, 96, 40);
+                                            const type = hitObject.type;
 
-                                            ctx.fillStyle = "#fff";
-                                            ctx.fillRect(hitObject.column * 100 + 2, y + 30, 96, 10);
+                                            // if hold note, draw the track
+                                            if (type === 1) {
+                                                const yEnd = canvas.height - ((hitObject.end - currentTime) / approachTime) * canvas.height - 160;
+                                                ctx.fillStyle = "#7700ff";
+                                                ctx.fillRect(hitObject.column * 100 + 6, (hitObject.started ? yEnd : y), 88, (hitObject.started ? canvas.height - 160 - yEnd : yEnd - y));
+                                            }
+                                            
+                                            if (!(type === 1 && hitObject.started)) {
+                                                ctx.fillStyle = "#b574ff";
+                                                ctx.fillRect(hitObject.column * 100 + 2, y, 96, 40);
 
-                                            if (timeUntilHit < -200) {
+                                                ctx.fillStyle = "#fff";
+                                                ctx.fillRect(hitObject.column * 100 + 2, y + 30, 96, 10);
+                                            }
+
+                                            if (!hitObject.started && timeUntilHit < -200) {
                                                 // missed
-                                                hitObjects.splice(j, 1);
-                                                j--;
+                                                hitObject.done = true;
                                                 misses++;
                                                 combo = 0;
+                                                totalAccuracy++;
 
                                                 getElementById("judgment").textContent = "Miss";
                                                 getElementById("judgment").style.color = "#f55";
@@ -573,15 +646,31 @@ getElementById("file-drop").addEventListener("change", e => {
                                     }
                                 }
 
+                                for (const obj of startedNotes) {
+                                    const timeUntilEnd = obj.end - currentTime;
+                                    if (timeUntilEnd < -judgments[judgments.length - 1].window) {
+                                        // missed
+                                        obj.done = true;
+                                        misses++;
+                                        combo = 0;
+                                        totalAccuracy++;
+
+                                        getElementById("judgment").textContent = "Miss";
+                                        getElementById("judgment").style.color = "#f55";
+
+                                        startedNotes.delete(obj);
+                                    }
+                                }
+
                                 getElementById("combo").textContent = `Combo: ${combo}`;
-                                accuracyDisplay = lerp(accuracyDisplay, hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : 100, 0.1);
+                                accuracyDisplay = lerp(accuracyDisplay, hits + misses > 0 ? ((cumulativeAccuracy / totalAccuracy) * 100).toFixed(2) : 100, 0.1);
                                 getElementById("accuracy").textContent = `Accuracy: ${accuracyDisplay.toFixed(2)}%`;
 
                                 const stars = getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed);
-                                const pf = getPerformance(game.mode, stars, cumulativeAccuracy / (hits + misses) || 0, misses, hits + misses, game.speed);
+                                const pf = getPerformance(game.mode, stars, cumulativeAccuracy / totalAccuracy || 0, misses, hits + misses, game.speed);
                                 getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
 
-                                score = pf / maxPF * 1e6 * stars / maxStars * (hits + misses) / hitObjects.length;
+                                score = (pf / maxPF * stars / maxStars) ** 0.5 * totalAccuracy / hitObjects.length * 1e6;
                                 scoreDisplay = lerp(scoreDisplay, score, 0.1);
                                 getElementById("score").textContent = `${Math.round(scoreDisplay).toLocaleString()}`;
 
@@ -593,7 +682,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                 getElementById("cumulative-stars").textContent = `${stars?.toFixed(2) || "0.00"}*`;
                                 getElementById("cumulative-stars").style.color = getColor(stars);
 
-                                if ((hits + misses === hitObjects.length && audio.ended) || completed) {
+                                if ((hits + misses >= hitObjects.length && audio.ended) || completed) {
                                     // show results
                                     completed = true;
                                     loop = false;
@@ -606,7 +695,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                     getElementById("results-difficulty").textContent = `${getStarRating(game.mode, hitObjects, game.speed).toFixed(2)}*`;
                                     getElementById("results-difficulty").style.color = getColor(getStarRating(game.mode, hitObjects, game.speed));
 
-                                    const rank = getRank(cumulativeAccuracy / (hits + misses) || 0, misses);
+                                    const rank = getRank(cumulativeAccuracy / totalAccuracy || 0, misses);
                                     getElementById("results-rank").textContent = `${rank.rank}`;
                                     getElementById("results-rank").style.setProperty("--rank-color", rank.color);
                                     getElementById("results-rank").style.setProperty("--rank-glow", /[SX]/.test(rank.rank) ? "8px" : "0");
@@ -614,7 +703,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                     getElementById("results-score").textContent = `${Math.round(score).toLocaleString()}`;
                                     
                                     getElementById("results-max-combo").textContent = `${maxCombo}x`;
-                                    getElementById("results-accuracy").textContent = `${hits + misses > 0 ? ((cumulativeAccuracy / (hits + misses)) * 100).toFixed(2) : "0"}%`;
+                                    getElementById("results-accuracy").textContent = `${hits + misses > 0 ? ((cumulativeAccuracy / totalAccuracy) * 100).toFixed(2) : "0"}%`;
                                     getElementById("results-performance").textContent = `${pf.toFixed(1)} pp`;
 
                                     getElementById("results-mods").textContent = `${game.speed.toFixed(2)}x`;
