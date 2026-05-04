@@ -71,7 +71,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
                 const lastEnd = Math.max(...ends.filter(e => e <= time));
 
                 const validAll = isFinite(lastDeltaAll);
-                const realDeltaLast = Math.min((time - modified[i - 1]?.time), 1.5 * (15 + time - lastEnd)) / speedMul || Infinity;
+                const realDeltaLast = Math.min((time - modified[i - 1]?.time), 1.5 * (25 + time - lastEnd)) / speedMul || Infinity;
                 const deltaLast = (realDeltaLast + (validAll ? lastDeltaAll * diffSpikePrev : 0)) / (validAll ? diffSpikePrev + 1 : 1);
                 if (setLasts) lastDeltaAll = deltaLast;
 
@@ -86,7 +86,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
                     const repetitionDecrease = (Math.abs(realDelta < lastRealDelta ? (realDelta - lastRealDelta) / lastRealDelta : (lastRealDelta - realDelta) / realDelta) ** 0.5 * 1.1 + 0.1) ** 0.25 || 0; // repeated patterns = easier
 
                     if (setLasts) lastAddition2 = 0;
-                    const out = (((1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3) / 4 * repetitionDecrease * (1 / Math.min(speedBuff / 1000, 1)) ** 0.07 * (activeHolds.length + 1) ** 0.11) * multiplier; // ultimate addition
+                    const out = (((1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3) / 4 * repetitionDecrease * (1 / Math.min(speedBuff / 1000, 1)) ** 0.07 * (activeHolds.reduce((a, b) => a + b.multiplier, 0) + 1) ** 0.11) * multiplier; // ultimate addition
 
                     if (setLasts) lastAddition = out;
                     difficulty += out ** 4;
@@ -103,6 +103,9 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
 
             // active hold notes
             if (obj.type === 1) {
+                const length = obj.end - obj.time;
+                obj.multiplier = 1;
+                // obj.multiplier = length < 200 ? (-(length - 200) / 180) ** 2 + 1.25 : 250 / length;
                 activeHolds.push(obj);
             }
         }
@@ -138,12 +141,12 @@ window.getPerformance = getPerformance;
 export function getRank(accuracy, misses) {
     let colors = {
         X: "#ccc",
-        SS: "#fc0",
-        S: "#f70",
+        SS: "#08f",
+        S: "#0cf",
         A: "#69d32a",
-        B: "#438be1",
-        C: "#9e4cce",
-        D: "#d23d3d",
+        B: "#caba13",
+        C: "#cf8849",
+        D: "#be4b4b",
         F: "#555"
     };
     let rank = "F";

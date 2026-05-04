@@ -76,7 +76,9 @@ function getColor(stars) {
     const next = closest + (keys.length > closest);
     if (next === closest || keys[next] === undefined) return colors[keys[closest]];
 
-    return lerpColor(colors[keys[closest]], colors[keys[next]], (stars - keys[closest]) / (keys[next] - keys[closest]));
+    const o = lerpColor(colors[keys[closest]], colors[keys[next]], (stars - keys[closest]) / (keys[next] - keys[closest]));
+    if (o.length !== 7) return "#000";
+    return o;
 }
 
 function lerpColor(a, b, amount) {
@@ -493,6 +495,8 @@ getElementById("file-drop").addEventListener("change", e => {
                                     inputEvents.push({column: hitObject.column, time: hitObject.time});
                                     if (hitObject.type === 1) {
                                         inputEvents.push({column: hitObject.column, time: hitObject.end, release: true});
+                                    } else {
+                                        inputEvents.push({column: hitObject.column, time: hitObject.time, release: true});
                                     }
                                 }
                             }
@@ -523,7 +527,11 @@ getElementById("file-drop").addEventListener("change", e => {
                                     const interval = Math.floor(time / 1000);
                                     let processed = false;
                                     let isRelease = event.release;
-                                    if (!isRelease) pulses[column] = time;
+                                    if (isRelease || auto) pulses[column] = time;
+
+                                    if (auto) {
+                                        keysPressed[keybinds[game.keys][column]] = !isRelease;
+                                    }
 
                                     for (let i = Math.floor(interval - game.speed); i < interval + 2 * game.speed && !processed; i++) {
                                         const intervalNotes = (hitObjectsPerInterval[i] || []).concat(isRelease ? Array.from(startedNotes) : []);
@@ -558,7 +566,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                                         cumulativeOffset += timeDiff;
                                                         getElementById("offset").textContent = `Avg. Error: ${(cumulativeOffset / hits).toFixed(2)} ms`;
                                                     } else {
-                                                        misses++;
+                                                        if (!isRelease) misses++;
                                                         combo = 0;
                                                         totalAccuracy++;
                                                     }
@@ -601,7 +609,8 @@ getElementById("file-drop").addEventListener("change", e => {
 
                                     // pulses
                                     if (pulses[i] > 0) {
-                                        const opacity = (pulses[i] - currentTime) / 500 + 0.5;
+                                        const keybind = keybinds[game.keys]?.[i];
+                                        const opacity = keysPressed[keybind] ? 0.5 : (pulses[i] - currentTime) / 200 + 0.5;
                                         ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
                                         ctx.fillRect(i * 100 + 2, canvas.height - 160, 96, 160);
                                     }
@@ -651,7 +660,6 @@ getElementById("file-drop").addEventListener("change", e => {
                                     if (timeUntilEnd < -judgments[judgments.length - 1].window) {
                                         // missed
                                         obj.done = true;
-                                        misses++;
                                         combo = 0;
                                         totalAccuracy++;
 
@@ -670,7 +678,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                 const pf = getPerformance(game.mode, stars, cumulativeAccuracy / totalAccuracy || 0, misses, hits + misses, game.speed);
                                 getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
 
-                                score = (pf / maxPF * stars / maxStars) ** 0.5 * totalAccuracy / hitObjects.length * 1e6;
+                                score = (pf / maxPF * stars / maxStars) ** 0.5 * (hits + misses) / hitObjects.length * 1e6;
                                 scoreDisplay = lerp(scoreDisplay, score, 0.1);
                                 getElementById("score").textContent = `${Math.round(scoreDisplay).toLocaleString()}`;
 
