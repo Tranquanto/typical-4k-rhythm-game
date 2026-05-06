@@ -30,16 +30,25 @@ export function modify(hitObjects, mods = new Set()) {
  * @param {Set.<string>} mods a set of mods to apply
  * @returns {number} star rating
  */
-export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Math.max(10, hitObjects.length / 50), mods = new Set()) {
+export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Math.max(10, hitObjects.length / 50), mods = new Set(),
+    options = {evalHoldsPrior: false}
+) {
     if (hitObjects.length === 0) return 0; // no objects = 0 stars
 
-    const modified = modify(JSON.parse(JSON.stringify(hitObjects)), mods);
+    let modified = !options.evalHoldsPrior ? modify(JSON.parse(JSON.stringify(hitObjects)), mods) : JSON.parse(JSON.stringify(hitObjects));
 
     const ends = modified.filter(e => e.type === 1).map(o => o.end);
 
     if (mode === "keys") {
         // calculate number of keys based on columns in hitObjects
         const keys = Math.max(...modified.map(o => o.column)) + 1;
+        
+        if (!options.evalHoldsPrior) {
+            const holds = modified.filter(o => o.type === 1);
+            const outputHolds = getStarRating(mode, holds, speedMul, diffSpikePrev, mods, {...options, evalHoldsPrior: true});
+
+            modified = modified.filter(o => o.type === 0).concat(holds).sort((a, b) => a.time - b.time);
+        }
 
         let difficulty = 0; // total added difficulty that gets ultimately gets converted to stars
 
@@ -85,16 +94,25 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
 
                 if (delta === 0) {
                     if (setLasts) lastAddition2++;
+                    obj.difficulty = 0;
                     // difficulty += lastAddition * lastAddition2 ** 3; // chord; more objects in chord = more difficult
                 } else { // new time
                     const lastRealDelta = lastDeltaColumns[column] ?? Infinity;
                     const repetitionDecrease = (Math.abs(realDelta < lastRealDelta ? (realDelta - lastRealDelta) / lastRealDelta : (lastRealDelta - realDelta) / realDelta) ** 0.5 * 1.1 + 0.1) ** 0.25 || 0; // repeated patterns = easier
 
                     if (setLasts) lastAddition2 = 0;
-                    const out = (((1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3) / 4 * repetitionDecrease * (1 / Math.min(speedBuff / 1000, 1)) ** 0.07 * (activeHolds.reduce((a, b) => a + b.multiplier, 0) + 1) ** 0.11) * multiplier; // ultimate addition
+                    const out = (
+                        (
+                            (1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3
+                        ) / 4 * repetitionDecrease * (
+                            1 / Math.min(speedBuff / 1000, 1)
+                        ) ** 0.07
+                        + (options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0), 0) ** 0.5 / 5)
+                    ) * multiplier; // ultimate addition
 
                     if (setLasts) lastAddition = out;
-                    difficulty += out ** 4;
+                    if (multiplier === 1) obj.difficulty = out;
+                    if (!options.evalHoldsPrior) difficulty += out ** 4;
                 }
                 if (setLasts) lastColumns[obj.column] = time; // update last time for this column
                 if (setLasts) lastEnds[obj.column] = obj.end ?? time;
@@ -114,6 +132,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
                 activeHolds.push(obj);
             }
         }
+        if (options.evalHoldsPrior) return modified;
         let stars = difficulty ** (1 / 12) * 2.5 - 1; // convert "difficulty" to star rating
         if (stars < 1) stars = (stars + 1) ** 2 / 4;
         return stars;
