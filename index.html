@@ -37,12 +37,16 @@
             </div>
             <div id="mod-keys" class="mod">
                 <label for="mod-keys-input">Keys</label>
-                <input type="range" id="mod-keys-input" min="1" max="9" value="4" step="1">
+                <input type="range" id="mod-keys-input" min="1" max="10" value="4" step="1">
                 <span id="mod-keys-value">4K</span>
             </div>
             <div id="mod-no-holds" class="mod">
                 <label for="mod-no-holds-input">No Holds</label>
                 <input type="checkbox" id="mod-no-holds-input">
+            </div>
+            <div id="mod-all-holds" class="mod" style="display: none;">
+                <label for="mod-all-holds-input">All Holds</label>
+                <input type="checkbox" id="mod-all-holds-input">
             </div>
         </div>
     </div>
@@ -52,7 +56,7 @@
             <span id="combo">Combo: 0</span><br>
             <span id="accuracy">Accuracy: 100.00%</span><br>
             <div id="top-middle">
-                <span id="current-stars">0.00*</span> |
+                <!-- <span id="current-stars">0.00*</span> | -->
                 <span id="cumulative-stars">0.00*</span><br>
                 <span id="performance">0.0 pp</span><br><br>
                 <span id="judgment"></span><br>
@@ -61,10 +65,12 @@
         </div>
         <canvas id="game-canvas"></canvas>
         <div id="pause-overlay" style="display: none;">
-            <span>Paused</span>
-            <button id="pause-resume-btn">Resume</button>
-            <button id="pause-retry-btn">Retry</button>
-            <button id="pause-menu-btn">Return to Menu</button>
+            <span>Paused</span><br>
+            <div id="pause-buttons">
+                <button id="pause-resume-btn">Resume</button>
+                <button id="pause-retry-btn">Retry</button>
+                <button id="pause-menu-btn">Return to Menu</button>
+            </div>
         </div>
     </div>
     <div id="results" style="display: none;">

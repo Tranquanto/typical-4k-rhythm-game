@@ -143,6 +143,7 @@ getElementById("file-drop").addEventListener("change", e => {
 
                         let timingPoints = [];
                         const timingPointsIndex = lines.findIndex(l => l === "[TimingPoints]");
+                        let lastBeatLength = 500;
                         if (timingPointsIndex !== -1) {
                             const timingPointsLines = lines.slice(timingPointsIndex + 1);
                             for (let i = 0; i < timingPointsLines.length; i++) {
@@ -152,9 +153,12 @@ getElementById("file-drop").addEventListener("change", e => {
                                 const parts = line.split(",");
                                 const time = Number(parts[0]);
                                 const beatLength = Number(parts[1]);
-                                if (beatLength < 0) continue;
-
-                                timingPoints.push({time, beatLength});
+                                if (beatLength < 0) {
+                                    timingPoints.push({time, beatLength: lastBeatLength, scrollSpeed: -100 / beatLength});
+                                } else {
+                                    timingPoints.push({time, beatLength, scrollSpeed: 1});
+                                    lastBeatLength = beatLength;
+                                }
                             }
                         }
 
@@ -163,7 +167,7 @@ getElementById("file-drop").addEventListener("change", e => {
                         let perKey = {};
                         let hitObjectsPerInterval = {};
 
-                        for (let keys = 1; keys <= 9; keys++) {
+                        for (let keys = 1; keys <= 10; keys++) {
                             const hitObjects = [...new Set(lines.slice(hitObjectsIndex + 1).map((l, i) => {
                                 const parts = l.split(",");
                                 const data = {
@@ -346,8 +350,8 @@ getElementById("file-drop").addEventListener("change", e => {
                         const difficultyBar = document.createElement("div");
                         difficultyBar.classList.add("map-difficulty-bar");
 
-                        const diffsPerHitObject = perKey[game.keys].map((h, i) => [getStarRating(game.mode, perKey[game.keys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[game.keys].length)), 1, 0), h.time]);
-                        const maxTime = perKey[game.keys].length ? perKey[game.keys][perKey[game.keys].length - 1].time : 0;
+                        const diffsPerHitObject = perKey[originalKeys].map((h, i) => [getStarRating(game.mode, perKey[originalKeys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[originalKeys].length)), 1, 0), h.time]);
+                        const maxTime = perKey[originalKeys].length ? perKey[originalKeys][perKey[originalKeys].length - 1].end ?? perKey[originalKeys][perKey[originalKeys].length - 1].time : 0;
                         // build a gradient
                         const gradient = document.createElement("canvas");
                         gradient.width = 1000;
@@ -373,6 +377,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             audio,
                             hitObjects: perKey,
                             hitObjectsPerInterval,
+                            originalKeys,
                             getStars: k => getStarRating(game.mode, perKey[k], game.speed, undefined, game.mods)
                         });
 
@@ -430,11 +435,12 @@ getElementById("file-drop").addEventListener("change", e => {
 
                             let score = 0, scoreDisplay = 0;
                             let combo = 0, maxCombo = 0;
+                            let pfDisplay = 0, starsDisplay = 0;
                             let hits = 0;
                             let misses = 0;
                             let cumulativeAccuracy = 0, accuracyDisplay = 100, totalAccuracy = 0;
                             let cumulativeOffset = 0;
-                            let approachTime = 800 * game.speed;
+                            let approachTime = 650 * game.speed;
                             let inputEvents = [];
                             let pulses = [0, 0, 0, 0]; // pulse time per column
                             let completed = false, paused = false;
@@ -675,20 +681,22 @@ getElementById("file-drop").addEventListener("change", e => {
                                 getElementById("accuracy").textContent = `Accuracy: ${accuracyDisplay.toFixed(2)}%`;
 
                                 const stars = getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed);
+                                starsDisplay = lerp(starsDisplay, stars, 0.1);
                                 const pf = getPerformance(game.mode, stars, cumulativeAccuracy / totalAccuracy || 0, misses, hits + misses, game.speed);
-                                getElementById("performance").textContent = `${pf.toFixed(1)} pp`;
+                                pfDisplay = lerp(pfDisplay, pf, 0.1);
+                                getElementById("performance").textContent = `${Math.round(pfDisplay)} pp`;
 
                                 score = (pf / maxPF * stars / maxStars) ** 0.5 * (hits + misses) / hitObjects.length * 1e6;
                                 scoreDisplay = lerp(scoreDisplay, score, 0.1);
                                 getElementById("score").textContent = `${Math.round(scoreDisplay).toLocaleString()}`;
 
-                                const stars2 = getStarRating(game.mode, hitObjects.slice(Math.max(0, hits + misses - 15), hits + misses), game.speed, 1);
+                                /* const stars2 = getStarRating(game.mode, hitObjects.slice(Math.max(0, hits + misses - 15), hits + misses), game.speed, 1);
 
                                 getElementById("current-stars").textContent = `${stars2?.toFixed(2) || "0.00"}*`;
-                                getElementById("current-stars").style.color = getColor(stars2);
+                                getElementById("current-stars").style.color = getColor(stars2); */
 
-                                getElementById("cumulative-stars").textContent = `${stars?.toFixed(2) || "0.00"}*`;
-                                getElementById("cumulative-stars").style.color = getColor(stars);
+                                getElementById("cumulative-stars").textContent = `${starsDisplay?.toFixed(2) || "0.00"}*`;
+                                getElementById("cumulative-stars").style.color = getColor(starsDisplay);
 
                                 if ((hits + misses >= hitObjects.length && audio.ended) || completed) {
                                     // show results

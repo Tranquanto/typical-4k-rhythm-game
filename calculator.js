@@ -1,5 +1,5 @@
 /**
- * Modifies a provided list of hit objects according to the specified mods. This is an in-place function.
+ * An in-place function that modifies a provided list of hit objects according to the specified mods.
  * @param {Array.<Object>} hitObjects an array of all the hit objects
  * @param {Set.<string>} mods a set of mods to apply
  * @returns {Array.<Object>} the modified hit objects
@@ -11,6 +11,11 @@ export function modify(hitObjects, mods = new Set()) {
                 hitObjects[i].type = 0;
                 delete hitObjects[i].end;
             }
+        } else if (mods.has("all-holds")) {
+            if (hitObjects[i].type === 0) {
+                hitObjects[i].type = 1;
+                hitObjects[i].end = hitObjects.find(h => h.column === hitObjects[i].column && h.time > hitObjects[i].time)?.time - 100 ?? (hitObjects[i].time + 500);
+            }
         }
     }
 
@@ -18,7 +23,7 @@ export function modify(hitObjects, mods = new Set()) {
 }
 
 /**
- * Calculates the star rating for a given set of hit objects.
+ * Calculates and returns the star rating for a given set of hit objects.
  * @param {Array.<Object>} hitObjects an array of all the hit objects
  * @param {number} speedMul speed multiplier (mod)
  * @param {number} diffSpikePrev difficulty spike prevention strength (0 = no prevention; 4 = default)
@@ -40,9 +45,9 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
 
         let lastAddition = 0;
         let lastAddition2 = 0;
-        let lastColumns = Array(9).fill(-Infinity);
-        let lastEnds = Array(9).fill(-Infinity);
-        let lastDeltaColumns = Array(9).fill(0);
+        let lastColumns = Array(10).fill(-Infinity);
+        let lastEnds = Array(10).fill(-Infinity);
+        let lastDeltaColumns = Array(10).fill(0);
         let lastDelta = Infinity, lastDeltaAll = Infinity;
         let speedBuff = Infinity; // fast notes across different columns also increase difficulty
         let lastLength = Infinity; // for hold notes
@@ -63,7 +68,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
 
             function evaluate(time, multiplier = 1, setLasts = true) {
                 const valid = isFinite(lastDelta);
-                const realDelta = Math.min((time - (lastColumns[column] ?? -Infinity)), 1.5 * (15 + time - (lastEnds[column] ?? -Infinity))) / speedMul;
+                const realDelta = Math.min((time - (lastColumns[column] ?? -Infinity)), 1.8 * (15 + time - (lastEnds[column] ?? -Infinity))) / speedMul;
                 const delta = (realDelta + (valid ? lastDelta * diffSpikePrev : 0)) / (valid ? diffSpikePrev + 1 : 1); // time since last object (ms); first object is treated as free
                 if (setLasts) lastDelta = delta;
 
@@ -71,7 +76,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
                 const lastEnd = Math.max(...ends.filter(e => e <= time));
 
                 const validAll = isFinite(lastDeltaAll);
-                const realDeltaLast = Math.min((time - modified[i - 1]?.time), 1.5 * (25 + time - lastEnd)) / speedMul || Infinity;
+                const realDeltaLast = Math.min((time - modified[i - 1]?.time), 1.8 * (25 + time - lastEnd)) / speedMul || Infinity;
                 const deltaLast = (realDeltaLast + (validAll ? lastDeltaAll * diffSpikePrev : 0)) / (validAll ? diffSpikePrev + 1 : 1);
                 if (setLasts) lastDeltaAll = deltaLast;
 
@@ -123,13 +128,15 @@ export function getPerformance(mode, stars, accuracy = 1, misses = 0, notes = st
     }
 
     if (mode === "keys") {
-        const mul = (accuracy ** (8 / speedMul)) / (1 + misses * 40 / (notes || 1));
+        const mul = (accuracy ** (8 / speedMul)) / (1 || (1 + misses * 40 / (notes || 1)));
 
         let a = 2.8 ** (Math.log(stars) / Math.log(1.7)) * 7 * mul;
 
         let b = 0;
         if (stars > 5) b = (stars - 5) ** 2 * 10 * mul;
         if (stars > 10) b /= 1.06 ** (stars - 10);
+
+        let readingPerformance = 0; // based on note density and scroll speed changes (will be added later)
 
         const performance = (Math.max(a + b, 0)) * (1 + Math.sqrt(notes + misses) / 90);
         if (debug) return [performance, a, b];

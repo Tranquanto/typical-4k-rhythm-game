@@ -63,7 +63,7 @@ button {
 }
 
 #mods {
-    position: absolute;
+    position: fixed;
     top: 8px;
     left: 8px;
     width: calc(50% - 16px);
@@ -95,6 +95,11 @@ button {
 .map-name, #map-name {
     font-size: 36px;
     display: block;
+}
+
+.map-difficulty {
+    background-clip: text;
+    color: transparent;
 }
 
 .map-version {
@@ -174,7 +179,43 @@ button {
     top: 8px;
     left: 50%;
     transform: translateX(-50%);
+    z-index: 96;
+}
+
+#pause-overlay {
+    text-align: center;
+    position: fixed;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 100%;
+    height: 100%;
+    background: #000a;
     z-index: 99;
+}
+
+#pause-overlay > span {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 96px;
+}
+
+#pause-buttons {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+}
+
+#pause-buttons > button {
+    margin: 0 12px;
+    font-size: 24px;
+    border-radius: 0;
+    border: 4px solid #f8b0ff;
+    background: #406;
+    color: inherit;
+    cursor: pointer;
 }
 
 #results {
