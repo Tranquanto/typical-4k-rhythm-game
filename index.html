@@ -25,6 +25,11 @@
     <div id="map-list" style="display: none;">
         <div id="mods">
             <button id="import-btn"><label for="file-drop" style="cursor: pointer;">Import .osz file(s)</label></button>
+            <div id="note-shape" class="mod">
+                <label for="mod-note-shape-input">Note Shape</label>
+                <input type="range" id="mod-note-shape-input" min="0" max="1" value="0" step="1">
+                <span id="mod-note-shape-value">Bar</span>
+            </div>
             <div id="volume" class="mod">
                 <label for="mod-volume-input">Volume</label>
                 <input type="range" id="mod-volume-input" min="0" max="1" value="1" step="0.01">

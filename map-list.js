@@ -4,6 +4,7 @@ import { getElementById } from "./getElementById.js"; // to prevent constantly c
 
 export const game = {
     mode: "keys",
+    noteShape: 0, // 0 = rectangle, 1 = circle
     keys: 4,
     speed: 1,
     offset: 0, // audio offset in ms
@@ -604,21 +605,26 @@ getElementById("file-drop").addEventListener("change", e => {
                                 for (let i = 0; i < game.keys; i++) {
                                     ctx.fillStyle = "#33006d";
                                     ctx.fillRect(i * 100 + 2, 0, 96, canvas.height);
+                                    
+                                    // pulses
+                                    let pulseOpacity = 0;
+                                    if (pulses[i] > 0) {
+                                        const keybind = keybinds[game.keys]?.[i];
+                                        pulseOpacity = keysPressed[keybind] ? 0.5 : (pulses[i] - currentTime) / 200 + 0.5;
+                                    }
 
                                     // floor
-                                    ctx.fillStyle = "#4b00a0";
+                                    ctx.fillStyle = lerpColor("#4b00a0", "#fff", Math.max(0, Math.min(1, pulseOpacity)));
                                     ctx.fillRect(i * 100 + 2, canvas.height - 160, 96, 160);
 
                                     // judgment line
-                                    ctx.fillStyle = "#7700ff";
-                                    ctx.fillRect(i * 100 + 2, canvas.height - 160, 96, 40);
-
-                                    // pulses
-                                    if (pulses[i] > 0) {
-                                        const keybind = keybinds[game.keys]?.[i];
-                                        const opacity = keysPressed[keybind] ? 0.5 : (pulses[i] - currentTime) / 200 + 0.5;
-                                        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-                                        ctx.fillRect(i * 100 + 2, canvas.height - 160, 96, 160);
+                                    ctx.fillStyle = lerpColor("#7700ff", "#fff", Math.max(0, Math.min(1, pulseOpacity)));
+                                    if (game.noteShape === 0) {
+                                        ctx.fillRect(i * 100 + 2, canvas.height - 160, 96, 40);
+                                    } else if (game.noteShape === 1) {
+                                        ctx.beginPath();
+                                        ctx.ellipse(i * 100 + 50, canvas.height - 160, 48, 48, 0, 0, Math.PI * 2);
+                                        ctx.fill();
                                     }
                                 }
 
@@ -636,15 +642,37 @@ getElementById("file-drop").addEventListener("change", e => {
                                             if (type === 1) {
                                                 const yEnd = canvas.height - ((hitObject.end - currentTime) / approachTime) * canvas.height - 160;
                                                 ctx.fillStyle = "#7700ff";
-                                                ctx.fillRect(hitObject.column * 100 + 6, (hitObject.started ? yEnd : y), 88, (hitObject.started ? canvas.height - 160 - yEnd : yEnd - y));
+                                                if (game.noteShape === 0)
+                                                    ctx.fillRect(hitObject.column * 100 + 6, (hitObject.started ? yEnd : y), 88, (hitObject.started ? canvas.height - 160 - yEnd : yEnd - y));
+                                                else
+                                                    ctx.fillRect(hitObject.column * 100 + 2, (hitObject.started ? yEnd : y), 96, (hitObject.started ? canvas.height - 160 - yEnd : yEnd - y));
+
+                                                if (game.noteShape === 1) {
+                                                    ctx.beginPath();
+                                                    ctx.ellipse(hitObject.column * 100 + 50, yEnd, 48, 48, 0, 0, Math.PI * 2);
+                                                    ctx.fill();
+                                                }
                                             }
                                             
                                             if (!(type === 1 && hitObject.started)) {
-                                                ctx.fillStyle = "#b574ff";
-                                                ctx.fillRect(hitObject.column * 100 + 2, y, 96, 40);
+                                                if (game.noteShape === 0) {
+                                                    ctx.fillStyle = "#b574ff";
+                                                    ctx.fillRect(hitObject.column * 100 + 2, y, 96, 40);
 
-                                                ctx.fillStyle = "#fff";
-                                                ctx.fillRect(hitObject.column * 100 + 2, y + 30, 96, 10);
+                                                    ctx.fillStyle = "#fff";
+                                                    ctx.fillRect(hitObject.column * 100 + 2, y + 30, 96, 10);
+                                                } else if (game.noteShape === 1) {
+                                                    ctx.fillStyle = "#b574ff";
+                                                    ctx.beginPath();
+                                                    ctx.ellipse(hitObject.column * 100 + 50, y, 48, 48, 0, 0, Math.PI * 2);
+                                                    ctx.fill();
+
+                                                    ctx.strokeStyle = "#fff";
+                                                    ctx.lineWidth = 10;
+                                                    ctx.beginPath();
+                                                    ctx.ellipse(hitObject.column * 100 + 50, y, 43, 43, 0, Math.PI / 6, Math.PI * 5 / 6);
+                                                    ctx.stroke();
+                                                }
                                             }
 
                                             if (!hitObject.started && timeUntilHit < -200) {

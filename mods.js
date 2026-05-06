@@ -1,6 +1,12 @@
 import { game, recalcStars } from "./map-list.js";
 import { getElementById } from "./getElementById.js";
 
+getElementById("mod-note-shape-input").addEventListener("input", e => {
+    const value = parseInt(e.target.value);
+    game.noteShape = value;
+    getElementById("mod-note-shape-value").textContent = value === 0 ? "Bar" : "Circle";
+});
+
 getElementById("mod-volume-input").addEventListener("input", e => {
     const value = parseFloat(e.target.value);
     game.volume = value;
