@@ -351,24 +351,26 @@ getElementById("file-drop").addEventListener("change", e => {
                         const difficultyBar = document.createElement("div");
                         difficultyBar.classList.add("map-difficulty-bar");
 
-                        const diffsPerHitObject = perKey[originalKeys].map((h, i) => [getStarRating(game.mode, perKey[originalKeys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[originalKeys].length)), 1, 0), h.time]);
-                        const maxTime = perKey[originalKeys].length ? perKey[originalKeys][perKey[originalKeys].length - 1].end ?? perKey[originalKeys][perKey[originalKeys].length - 1].time : 0;
-                        // build a gradient
-                        const gradient = document.createElement("canvas");
-                        gradient.width = 1000;
-                        gradient.height = 8;
-                        const gctx = gradient.getContext("2d");
-                        const grad = gctx.createLinearGradient(0, 0, gradient.width, 0);
-                        let last = 0;
-                        for (let i = 0; i < diffsPerHitObject.length; i++) {
-                            const [diff, time] = diffsPerHitObject[i];
-                            grad.addColorStop(time / maxTime, getColor((diff + last * 3) / 4));
-                            last = diff;
+                        if (perKey[originalKeys]?.length < 5000) { // hard limit to avoid lag
+                            const diffsPerHitObject = perKey[originalKeys].map((h, i) => [getStarRating(game.mode, perKey[originalKeys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[originalKeys].length)), 1, 0), h.time]);
+                            const maxTime = perKey[originalKeys].length ? perKey[originalKeys][perKey[originalKeys].length - 1].end ?? perKey[originalKeys][perKey[originalKeys].length - 1].time : 0;
+                            // build a gradient
+                            const gradient = document.createElement("canvas");
+                            gradient.width = 1000;
+                            gradient.height = 8;
+                            const gctx = gradient.getContext("2d");
+                            const grad = gctx.createLinearGradient(0, 0, gradient.width, 0);
+                            let last = 0;
+                            for (let i = 0; i < diffsPerHitObject.length; i++) {
+                                const [diff, time] = diffsPerHitObject[i];
+                                grad.addColorStop(time / maxTime, getColor((diff + last * 3) / 4));
+                                last = diff;
+                            }
+                            gctx.fillStyle = grad;
+                            gctx.fillRect(0, 0, gradient.width, gradient.height);
+                            difficultyBar.style.backgroundImage = `url(${gradient.toDataURL()})`;
+                            mapElem.appendChild(difficultyBar);
                         }
-                        gctx.fillStyle = grad;
-                        gctx.fillRect(0, 0, gradient.width, gradient.height);
-                        difficultyBar.style.backgroundImage = `url(${gradient.toDataURL()})`;
-                        mapElem.appendChild(difficultyBar);
 
                         maps.push({
                             id: maps.length,
@@ -436,7 +438,9 @@ getElementById("file-drop").addEventListener("change", e => {
 
                             let score = 0, scoreDisplay = 0;
                             let combo = 0, maxCombo = 0;
+                            let stars = 0, pf = 0;
                             let pfDisplay = 0, starsDisplay = 0;
+                            let statsNeedRecalculation = false;
                             let hits = 0;
                             let misses = 0;
                             let cumulativeAccuracy = 0, accuracyDisplay = 100, totalAccuracy = 0;
@@ -597,6 +601,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                     }
                                     if (combo > maxCombo) maxCombo = combo;
                                 }
+                                statsNeedRecalculation = inputEvents.length;
                                 inputEvents = inputEvents.filter(e => !e.processed);
                                 const currentInterval = Math.floor(currentTime / 1000);
                                 canvas.width = canvas.width;
@@ -708,15 +713,17 @@ getElementById("file-drop").addEventListener("change", e => {
                                 accuracyDisplay = lerp(accuracyDisplay, hits + misses > 0 ? ((cumulativeAccuracy / totalAccuracy) * 100).toFixed(2) : 100, 0.1);
                                 getElementById("accuracy").textContent = `Accuracy: ${accuracyDisplay.toFixed(2)}%`;
 
-                                const stars = getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed);
+                                if (statsNeedRecalculation) stars = getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed);
                                 starsDisplay = lerp(starsDisplay, stars, 0.1);
-                                const pf = getPerformance(game.mode, stars, cumulativeAccuracy / totalAccuracy || 0, misses, hits + misses, game.speed);
+                                if (statsNeedRecalculation) pf = getPerformance(game.mode, stars, cumulativeAccuracy / totalAccuracy || 0, misses, hits + misses, game.speed);
                                 pfDisplay = lerp(pfDisplay, pf, 0.1);
-                                getElementById("performance").textContent = `${Math.round(pfDisplay)} pp`;
+                                getElementById("performance").textContent = `${Math.round(pfDisplay).toLocaleString()} pp`;
 
-                                score = (pf / maxPF * stars / maxStars) ** 0.5 * (hits + misses) / hitObjects.length * 1e6;
+                                if (statsNeedRecalculation) score = (pf / maxPF * stars / maxStars) ** 0.5 * (hits + misses) / hitObjects.length * 1e6;
                                 scoreDisplay = lerp(scoreDisplay, score, 0.1);
                                 getElementById("score").textContent = `${Math.round(scoreDisplay).toLocaleString()}`;
+
+                                statsNeedRecalculation = false;
 
                                 /* const stars2 = getStarRating(game.mode, hitObjects.slice(Math.max(0, hits + misses - 15), hits + misses), game.speed, 1);
 
