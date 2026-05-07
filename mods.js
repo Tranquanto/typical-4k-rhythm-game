@@ -1,4 +1,4 @@
-import { game, recalcStars } from "./map-list.js";
+import { game, recalcStars } from "./main.js";
 import { getElementById } from "./getElementById.js";
 
 getElementById("mod-note-shape-input").addEventListener("input", e => {
