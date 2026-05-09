@@ -47,7 +47,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
             const holds = modified.filter(o => o.type === 1);
             const outputHolds = getStarRating(mode, holds, speedMul, diffSpikePrev, mods, {...options, evalHoldsPrior: true});
 
-            modified = modified.filter(o => o.type === 0).concat(holds).sort((a, b) => a.time - b.time);
+            modified = modified.filter(o => o.type === 0).concat(outputHolds || []).sort((a, b) => a.time - b.time);
         }
 
         let difficulty = 0; // total added difficulty that gets ultimately gets converted to stars
@@ -105,13 +105,16 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
                         (
                             (1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3
                         ) / 4 * repetitionDecrease * (
-                            1 / Math.min(speedBuff / 1000, 1)
+                            1 / Math.min(speedBuff / Math.min(1, repetitionDecrease) / 1000, 1)
                         ) ** 0.07
-                        + (options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0), 0) ** 0.5 / 5)
+                        + (options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0) * Math.min(1, (time - b.time) / 150) * (b.multiplier || 1), 0) ** (1 / 3) / 2)
                     ) * multiplier; // ultimate addition
 
                     if (setLasts) lastAddition = out;
-                    if (multiplier === 1) obj.difficulty = out;
+                    if (options.evalHoldsPrior) {
+                        if (obj.difficulty === undefined) obj.difficulty = 0;
+                        obj.difficulty += out;
+                    }
                     if (!options.evalHoldsPrior) difficulty += out ** 4;
                 }
                 if (setLasts) lastColumns[obj.column] = time; // update last time for this column
@@ -122,7 +125,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
             }
 
             evaluate(obj.time);
-            if (obj.type === 1) evaluate(obj.end, 0, false);
+            if (obj.type === 1) evaluate(obj.end, options.evalHoldsPrior ? 1 : 0, false);
 
             // active hold notes
             if (obj.type === 1) {

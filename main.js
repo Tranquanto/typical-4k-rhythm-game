@@ -352,7 +352,7 @@ getElementById("file-drop").addEventListener("change", e => {
                         difficultyBar.classList.add("map-difficulty-bar");
 
                         if (perKey[originalKeys]?.length < 5000) { // hard limit to avoid lag
-                            const diffsPerHitObject = perKey[originalKeys].map((h, i) => [getStarRating(game.mode, perKey[originalKeys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[originalKeys].length)), 1, 0), h.time]);
+                            const diffsPerHitObject = perKey[originalKeys].map((h, i) => [getStarRating(game.mode, perKey[originalKeys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[originalKeys].length)), 1, 1), h.time]);
                             const maxTime = perKey[originalKeys].length ? perKey[originalKeys][perKey[originalKeys].length - 1].end ?? perKey[originalKeys][perKey[originalKeys].length - 1].time : 0;
                             // build a gradient
                             const gradient = document.createElement("canvas");
@@ -601,8 +601,9 @@ getElementById("file-drop").addEventListener("change", e => {
                                     }
                                     if (combo > maxCombo) maxCombo = combo;
                                 }
-                                statsNeedRecalculation = inputEvents.length;
+                                const length = inputEvents.length;
                                 inputEvents = inputEvents.filter(e => !e.processed);
+                                statsNeedRecalculation = length > inputEvents.length; // if the length changed, process
                                 const currentInterval = Math.floor(currentTime / 1000);
                                 canvas.width = canvas.width;
 
