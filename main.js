@@ -432,7 +432,7 @@ getElementById("file-drop").addEventListener("change", e => {
 
                             function now() {
                                 if (performance.now() < startTime)
-                                return (performance.now() - startTime) * game.speed + game.offset;
+                                return (performance.now() - startTime) * game.speed + game.offset + audioContext.outputLatency * 1000;
                                 return (audio.currentTime * 1000 ?? (performance.now() - startTime) * game.speed) + game.offset;
                             }
 
@@ -533,7 +533,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                 // process inputs
                                 for (const event of inputEvents) {
                                     const {column, time} = event;
-                                    if (time / game.speed + startTime > performance.now()) continue;
+                                    if (time > now()) continue;
                                     event.processed = true;
                                     const interval = Math.floor(time / 1000);
                                     let processed = false;
