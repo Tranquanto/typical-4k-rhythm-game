@@ -37,12 +37,12 @@ const keysPressed = {};
 
 export const maps = [];
 
-export function recalcStars(mods = game.mods) {
+export async function recalcStars(mods = game.mods) {
     for (let i = 0; i < maps.length; i++) {
         const map = maps[i];
         const mapElem = getElementById(`map-${map.id}`);
         const diffElem = mapElem.querySelector(".map-difficulty");
-        const stars = map.getStars(game.keys);
+        const stars = await map.getStars(game.keys);
         diffElem.innerText = menuStarText(stars, map.hitObjects);
         diffElem.style.color = getColor(stars.overall);
     }
@@ -350,7 +350,7 @@ getElementById("file-drop").addEventListener("change", e => {
 
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
-                        const stars = getStarRating(game.mode, perKey[game.keys], game.speed, undefined, game.mods, {all: true});
+                        const stars = await getStarRating(game.mode, perKey[game.keys], game.speed, undefined, game.mods, {all: true});
                         diffElem.innerText = menuStarText(stars, perKey);
                         diffElem.style.color = getColor(stars.overall);
                         mapElem.appendChild(diffElem);
@@ -359,7 +359,7 @@ getElementById("file-drop").addEventListener("change", e => {
                         const difficultyBar = document.createElement("div");
                         difficultyBar.classList.add("map-difficulty-bar");
 
-                        if (perKey[originalKeys]?.length < 5000) { // hard limit to avoid lag
+                        /* if (perKey[originalKeys]?.length < 5000) { // hard limit to avoid lag
                             const diffsPerHitObject = perKey[originalKeys].map((h, i) => [getStarRating(game.mode, perKey[originalKeys].slice(Math.max(0, i - 15), Math.min(i + 16, perKey[originalKeys].length)), 1, 1), h.time]);
                             const maxTime = perKey[originalKeys].length ? perKey[originalKeys][perKey[originalKeys].length - 1].end ?? perKey[originalKeys][perKey[originalKeys].length - 1].time : 0;
                             // build a gradient
@@ -378,7 +378,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             gctx.fillRect(0, 0, gradient.width, gradient.height);
                             difficultyBar.style.backgroundImage = `url(${gradient.toDataURL()})`;
                             mapElem.appendChild(difficultyBar);
-                        }
+                        } */
 
                         maps.push({
                             id: maps.length,
@@ -459,7 +459,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             let completed = false, paused = false;
                             let startedNotes = new Set();
 
-                            const maxStars = getStarRating(game.mode, map.hitObjects[game.keys]); // speed is not included in these
+                            const maxStars = await getStarRating(game.mode, map.hitObjects[game.keys]); // speed is not included in these
                             const maxPF = getPerformance(game.mode, maxStars, 1, 0, map.hitObjects[game.keys].length);
 
                             document.onkeydown = async e => {
@@ -539,7 +539,8 @@ getElementById("file-drop").addEventListener("change", e => {
                                 if (beatFraction >= 0) getElementById("background-pulse").style.opacity = 1 - Math.max(0, beatFraction);
 
                                 // process inputs
-                                for (const event of inputEvents) {
+                                for (let i = 0; i < Math.min(1000, inputEvents.length); i++) {
+                                    const event = inputEvents[i];
                                     const {column, time} = event;
                                     if (time > now()) continue;
                                     event.processed = true;
@@ -724,11 +725,14 @@ getElementById("file-drop").addEventListener("change", e => {
                                 getElementById("accuracy").textContent = `Accuracy: ${accuracyDisplay.toFixed(2)}%`;
 
                                 if (statsNeedRecalculation) {
-                                    starOutput = getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed, undefined, undefined, {all: true});
-                                    stars = starOutput.overall ?? 0;
+                                    getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed, undefined, undefined, {all: true})
+                                    .then(v => {
+                                        starOutput = v;
+                                        stars = starOutput.overall ?? 0;
+                                        pf = getPerformance(game.mode, stars, cumulativeAccuracy / totalAccuracy || 0, misses, hits + misses, game.speed)
+                                    });
                                 }
                                 starsDisplay = lerp(starsDisplay, stars, 0.1);
-                                if (statsNeedRecalculation) pf = getPerformance(game.mode, stars, cumulativeAccuracy / totalAccuracy || 0, misses, hits + misses, game.speed);
                                 pfDisplay = lerp(pfDisplay, pf, 0.1);
                                 getElementById("performance").textContent = `${Math.round(pfDisplay).toLocaleString()} pp`;
 
@@ -750,36 +754,38 @@ getElementById("file-drop").addEventListener("change", e => {
                                     // show results
                                     completed = true;
                                     loop = false;
-                                    getElementById("game").style.display = "none";
-                                    getElementById("results").style.display = "";
-                                    getElementById("background-pulse").style.opacity = 0;
+                                    getStarRating(game.mode, hitObjects, game.speed).then(starRating => {
+                                        getElementById("game").style.display = "none";
+                                        getElementById("results").style.display = "";
+                                        getElementById("background-pulse").style.opacity = 0;
 
-                                    getElementById("results-title").textContent = `${artist} - ${title} [${version}]`;
+                                        getElementById("results-title").textContent = `${artist} - ${title} [${version}]`;
 
-                                    getElementById("results-difficulty").textContent = `${getStarRating(game.mode, hitObjects, game.speed).toFixed(2)}*`;
-                                    getElementById("results-difficulty").style.color = getColor(getStarRating(game.mode, hitObjects, game.speed));
+                                        getElementById("results-difficulty").textContent = `${starRating.toFixed(2)}*`;
+                                        getElementById("results-difficulty").style.color = getColor(starRating);
 
-                                    const rank = getRank(cumulativeAccuracy / totalAccuracy || 0, misses);
-                                    getElementById("results-rank").textContent = `${rank.rank}`;
-                                    getElementById("results-rank").style.setProperty("--rank-color", rank.color);
-                                    getElementById("results-rank").style.setProperty("--rank-glow", /[SX]/.test(rank.rank) ? "8px" : "0");
+                                        const rank = getRank(cumulativeAccuracy / totalAccuracy || 0, misses);
+                                        getElementById("results-rank").textContent = `${rank.rank}`;
+                                        getElementById("results-rank").style.setProperty("--rank-color", rank.color);
+                                        getElementById("results-rank").style.setProperty("--rank-glow", /[SX]/.test(rank.rank) ? "8px" : "0");
 
-                                    getElementById("results-score").textContent = `${Math.round(score).toLocaleString()}`;
-                                    
-                                    getElementById("results-max-combo").textContent = `${maxCombo}x`;
-                                    getElementById("results-accuracy").textContent = `${hits + misses > 0 ? ((cumulativeAccuracy / totalAccuracy) * 100).toFixed(2) : "0"}%`;
-                                    getElementById("results-performance").textContent = `${pf.toFixed(1)} pp`;
+                                        getElementById("results-score").textContent = `${Math.round(score).toLocaleString()}`;
+                                        
+                                        getElementById("results-max-combo").textContent = `${maxCombo}x`;
+                                        getElementById("results-accuracy").textContent = `${hits + misses > 0 ? ((cumulativeAccuracy / totalAccuracy) * 100).toFixed(2) : "0"}%`;
+                                        getElementById("results-performance").textContent = `${pf.toFixed(1)} pp`;
 
-                                    getElementById("results-mods").textContent = `${game.speed.toFixed(2)}x`;
+                                        getElementById("results-mods").textContent = `${game.speed.toFixed(2)}x`;
 
-                                    getElementById("retry-btn").onclick = e => {
-                                        getElementById("results").style.display = "none";
-                                        loadMap(e);
-                                    };
-                                    getElementById("results-back-btn").onclick = () => {
-                                        getElementById("results").style.display = "none";
-                                        getElementById("map-list").style.display = "";
-                                    };
+                                        getElementById("retry-btn").onclick = e => {
+                                            getElementById("results").style.display = "none";
+                                            loadMap(e);
+                                        };
+                                        getElementById("results-back-btn").onclick = () => {
+                                            getElementById("results").style.display = "none";
+                                            getElementById("map-list").style.display = "";
+                                        };
+                                    });
                                 }
 
                                 if (loop) requestAnimationFrame(draw);

@@ -24,138 +24,137 @@ export function modify(hitObjects, mods = new Set()) {
 
 /**
  * Calculates and returns the star rating for a given set of hit objects.
- * @param {Array.<Object>} hitObjects an array of all the hit objects
+ * @param {Object[]} hitObjects an array of all the hit objects
  * @param {number} speedMul speed multiplier (mod)
  * @param {number} diffSpikePrev difficulty spike prevention strength (0 = no prevention; 4 = default)
  * @param {Set.<string>} mods a set of mods to apply
- * @returns {number} star rating
+ * @returns {Promise<number>} star rating
  */
-export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = 6 ?? Math.max(10, hitObjects.length / 50), mods = new Set(),
+export async function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = 6 ?? Math.max(10, hitObjects.length / 50), mods = new Set(),
     options = {
         evalHoldsPrior: false,
         all: false
     }
 ) {
-    if (hitObjects.length === 0) return 0; // no objects = 0 stars
+    return new Promise(async (resolve, reject) => {
+        if (hitObjects.length === 0) resolve(0); // no objects = 0 stars
 
-    let modified = !options.evalHoldsPrior ? modify(JSON.parse(JSON.stringify(hitObjects)), mods) : JSON.parse(JSON.stringify(hitObjects));
+        let modified = !options.evalHoldsPrior ? modify(JSON.parse(JSON.stringify(hitObjects)), mods) : JSON.parse(JSON.stringify(hitObjects));
 
-    const ends = modified.filter(e => e.type === 1).map(o => o.end);
+        const ends = modified.filter(e => e.type === 1).map(o => o.end);
 
-    if (mode === "keys") {
-        // calculate number of keys based on columns in hitObjects
-        const keys = Math.max(...modified.map(o => o.column)) + 1;
-        
-        if (!options.evalHoldsPrior) {
-            const holds = modified.filter(o => o.type === 1);
-            const outputHolds = getStarRating(mode, holds, speedMul, diffSpikePrev, mods, {...options, evalHoldsPrior: true});
+        if (mode === "keys") {            
+            if (!options.evalHoldsPrior) {
+                const holds = modified.filter(o => o.type === 1);
+                const outputHolds = await getStarRating(mode, holds, speedMul, diffSpikePrev, mods, {...options, evalHoldsPrior: true});
 
-            modified = modified.filter(o => o.type === 0).concat(outputHolds || []).sort((a, b) => a.time - b.time);
-        }
-
-        let difficulty = 0; // total added difficulty that gets ultimately gets converted to stars
-        let standardDifficulty = 0,
-            speedDifficulty = 0,
-            holdsDifficulty = 0;
-
-        let lastAddition = 0;
-        let lastAddition2 = 0;
-        let lastColumns = Array(10).fill(-Infinity);
-        let lastEnds = Array(10).fill(-Infinity);
-        let lastDeltaColumns = Array(10).fill(0);
-        let lastDeltas = Array(10).fill(Infinity), lastDeltaAll = Infinity;
-        let speedBuff = Infinity; // fast notes across different columns also increase difficulty
-        let activeHolds = [];
-
-        for (let i = 0; i < modified.length; i++) {
-            const obj = modified[i];
-
-            difficulty += 1e-6 * (i + 1); // tiny increase per object
-            const column = obj.column;
-
-            for (let h = 0; h < activeHolds.length; h++) {
-                if (activeHolds[h].end <= obj.time) { // hold ended
-                    activeHolds.splice(h, 1);
-                    h--;
-                }
+                modified = modified.filter(o => o.type === 0).concat(outputHolds || []).sort((a, b) => a.time - b.time);
             }
 
-            function evaluate(time, multiplier = 1, setLasts = true, addSpeed = true) {
-                const valid = isFinite(lastDeltas[column]);
-                const realDelta = Math.min((time - (lastColumns[column] ?? -Infinity)), 1.8 * (15 + time - (lastEnds[column] ?? -Infinity))) / speedMul;
-                const delta = (realDelta + (valid ? lastDeltas[column] * diffSpikePrev : 0)) / (valid ? diffSpikePrev + 1 : 1); // time since last object (ms); first object is treated as free
-                if (setLasts) lastDeltas[column] = delta;
+            let difficulty = 0; // total added difficulty that gets ultimately gets converted to stars
+            let standardDifficulty = 0,
+                speedDifficulty = 0,
+                holdsDifficulty = 0;
 
-                // find end that was closest to current time but before it
-                const lastEnd = Math.max(...ends.filter(e => e <= time));
+            let lastAddition = 0;
+            let lastAddition2 = 0;
+            let lastColumns = Array(10).fill(-Infinity);
+            let lastEnds = Array(10).fill(-Infinity);
+            let lastDeltaColumns = Array(10).fill(0);
+            let lastDeltas = Array(10).fill(Infinity), lastDeltaAll = Infinity;
+            let speedBuff = Infinity; // fast notes across different columns also increase difficulty
+            let activeHolds = [];
 
-                const validAll = isFinite(lastDeltaAll);
-                const realDeltaLast = Math.min((time - modified[i - 1]?.time), 1.8 * (25 + time - lastEnd)) / speedMul || Infinity;
-                const deltaLast = (realDeltaLast + (validAll ? lastDeltaAll * diffSpikePrev : 0)) / (validAll ? diffSpikePrev + 1 : 1);
-                if (setLasts) lastDeltaAll = deltaLast;
+            for (let i = 0; i < modified.length; i++) {
+                const obj = modified[i];
 
-                if (!isFinite(speedBuff)) speedBuff = realDeltaLast * 10;
-                if (setLasts) speedBuff = speedBuff * (1 - 1 / (diffSpikePrev + 4)) + realDeltaLast / (diffSpikePrev + 4);
+                difficulty += 1e-6 * (i + 1); // tiny increase per object
+                const column = obj.column;
 
-                if (delta === 0) {
-                    if (setLasts) lastAddition2++;
-                    obj.difficulty = 0;
-                    // difficulty += lastAddition * lastAddition2 ** 3; // chord; more objects in chord = more difficult
-                } else { // new time
-                    const lastRealDelta = lastDeltaColumns[column] ?? Infinity;
-                    const repetitionDecrease = (Math.abs(realDelta < lastRealDelta ? (realDelta - lastRealDelta) / lastRealDelta : (lastRealDelta - realDelta) / realDelta) ** 0.5 * 1.1 + 0.1) ** 0.25 || 0; // repeated patterns = easier
-
-                    if (setLasts) lastAddition2 = 0;
-                    const standardOut = ((1 / (delta + 1)) ** 2 * 1e5 * repetitionDecrease + lastAddition * 3) / 4;
-                    const speedOut = addSpeed ? 1 / (speedBuff / Math.min(1, repetitionDecrease ** 2)) ** 2 * 7000 : 0;
-                    const holdsOut = options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0) * Math.min(1, (time - b.time) / 150) * (b.multiplier || 1), 0) ** 0.5 * 2.8;
-                    const out = (standardOut + speedOut + holdsOut) * multiplier; // ultimate addition
-
-                    if (setLasts) lastAddition = standardOut;
-                    if (options.evalHoldsPrior) {
-                        if (obj.difficulty === undefined) obj.difficulty = 0;
-                        obj.difficulty += out;
-                    }
-                    if (!options.evalHoldsPrior) {
-                        difficulty += out ** 4;
-                        standardDifficulty += standardOut ** 4 * multiplier;
-                        speedDifficulty += speedOut ** 4 * multiplier;
-                        holdsDifficulty += holdsOut ** 4 * multiplier;
+                for (let h = 0; h < activeHolds.length; h++) {
+                    if (activeHolds[h].end <= obj.time) { // hold ended
+                        activeHolds.splice(h, 1);
+                        h--;
                     }
                 }
-                if (setLasts) lastColumns[obj.column] = time; // update last time for this column
-                if (setLasts) lastEnds[obj.column] = obj.end ?? time;
 
-                const valid2 = isFinite(lastDeltaColumns[column]);
-                if (setLasts) lastDeltaColumns[column] = (valid2 ? lastDeltaColumns[column] : realDelta) * 0.6 + realDelta * 0.4; // update last delta for this column
+                function evaluate(time, multiplier = 1, setLasts = true, addSpeed = true) {
+                    const valid = isFinite(lastDeltas[column]);
+                    const realDelta = Math.min((time - (lastColumns[column] ?? -Infinity)), 1.8 * (15 + time - (lastEnds[column] ?? -Infinity))) / speedMul;
+                    const delta = (realDelta + (valid ? lastDeltas[column] * diffSpikePrev : 0)) / (valid ? diffSpikePrev + 1 : 1); // time since last object (ms); first object is treated as free
+                    if (setLasts) lastDeltas[column] = delta;
+
+                    // find end that was closest to current time but before it
+                    const lastEnd = Math.max(...ends.filter(e => e <= time));
+
+                    const validAll = isFinite(lastDeltaAll);
+                    const realDeltaLast = Math.min((time - modified[i - 1]?.time), 1.8 * (25 + time - lastEnd)) / speedMul || Infinity;
+                    const deltaLast = (realDeltaLast + (validAll ? lastDeltaAll * diffSpikePrev : 0)) / (validAll ? diffSpikePrev + 1 : 1);
+                    if (setLasts) lastDeltaAll = deltaLast;
+
+                    if (!isFinite(speedBuff)) speedBuff = realDeltaLast * 10;
+                    if (setLasts) speedBuff = speedBuff * (1 - 1 / (diffSpikePrev + 4)) + realDeltaLast / (diffSpikePrev + 4);
+
+                    if (delta === 0) {
+                        if (setLasts) lastAddition2++;
+                        obj.difficulty = 0;
+                        // difficulty += lastAddition * lastAddition2 ** 3; // chord; more objects in chord = more difficult
+                    } else { // new time
+                        const lastRealDelta = lastDeltaColumns[column] ?? Infinity;
+                        const repetitionDecrease = (Math.abs(realDelta < lastRealDelta ? (realDelta - lastRealDelta) / lastRealDelta : (lastRealDelta - realDelta) / realDelta) ** 0.5 * 1.1 + 0.1) ** 0.25 || 0; // repeated patterns = easier
+
+                        if (setLasts) lastAddition2 = 0;
+                        const standardOut = ((1 / (delta + 1)) ** 2 * 1e5 * repetitionDecrease + lastAddition * 3) / 4;
+                        const speedOut = addSpeed ? 1 / (speedBuff / Math.min(1, repetitionDecrease ** 2)) ** 2 * 7000 : 0;
+                        const holdsOut = options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0) * Math.min(1, (time - b.time) / 150) * (b.multiplier || 1), 0) ** 0.5 * 2.8;
+                        const out = (standardOut + speedOut + holdsOut) * multiplier; // ultimate addition
+
+                        if (setLasts) lastAddition = standardOut;
+                        if (options.evalHoldsPrior) {
+                            if (obj.difficulty === undefined) obj.difficulty = 0;
+                            obj.difficulty += out;
+                        }
+                        if (!options.evalHoldsPrior) {
+                            difficulty += out ** 4;
+                            standardDifficulty += standardOut ** 4 * multiplier;
+                            speedDifficulty += speedOut ** 4 * multiplier;
+                            holdsDifficulty += holdsOut ** 4 * multiplier;
+                        }
+                    }
+                    if (setLasts) lastColumns[obj.column] = time; // update last time for this column
+                    if (setLasts) lastEnds[obj.column] = obj.end ?? time;
+
+                    const valid2 = isFinite(lastDeltaColumns[column]);
+                    if (setLasts) lastDeltaColumns[column] = (valid2 ? lastDeltaColumns[column] : realDelta) * 0.6 + realDelta * 0.4; // update last delta for this column
+                }
+
+                evaluate(obj.time);
+                if (obj.type === 1) evaluate(obj.end, options.evalHoldsPrior ? 1 : 0, false, false);
+
+                // active hold notes
+                if (obj.type === 1) {
+                    const length = obj.end - obj.time;
+                    obj.multiplier = 1;
+                    // obj.multiplier = length < 200 ? (-(length - 200) / 180) ** 2 + 1.25 : 250 / length;
+                    activeHolds.push(obj);
+                }
             }
-
-            evaluate(obj.time);
-            if (obj.type === 1) evaluate(obj.end, options.evalHoldsPrior ? 1 : 0, false, false);
-
-            // active hold notes
-            if (obj.type === 1) {
-                const length = obj.end - obj.time;
-                obj.multiplier = 1;
-                // obj.multiplier = length < 200 ? (-(length - 200) / 180) ** 2 + 1.25 : 250 / length;
-                activeHolds.push(obj);
+            if (options.evalHoldsPrior) resolve(modified);
+            if (!options.all) resolve(starsFromDifficulty(difficulty));
+            else {
+                resolve({
+                    overall: starsFromDifficulty(difficulty),
+                    standard: starsFromDifficulty(standardDifficulty),
+                    speed: starsFromDifficulty(speedDifficulty),
+                    holds: starsFromDifficulty(holdsDifficulty),
+                    difficulty,
+                    standardDifficulty,
+                    speedDifficulty,
+                    holdsDifficulty
+                });
             }
         }
-        if (options.evalHoldsPrior) return modified;
-        if (!options.all) return starsFromDifficulty(difficulty);
-        else {
-            return {
-                overall: starsFromDifficulty(difficulty),
-                standard: starsFromDifficulty(standardDifficulty),
-                speed: starsFromDifficulty(speedDifficulty),
-                holds: starsFromDifficulty(holdsDifficulty),
-                difficulty,
-                standardDifficulty,
-                speedDifficulty,
-                holdsDifficulty
-            };
-        }
-    }
+    });
 }
 
 function starsFromDifficulty(difficulty) {
@@ -178,13 +177,13 @@ export function getPerformance(mode, stars, accuracy = 1, misses = 0, notes = st
         if (stars > 5) b = (stars - 5) ** 2 * 10 * mul;
         if (stars > 10) b /= 1.06 ** (stars - 10);
 
-        let readingPerformance = 0; // based on note density and scroll speed changes (will be added later)
-
         const performance = (Math.max(a + b, 0)) * (1 + Math.sqrt(notes + misses) / 90);
         if (debug) return [performance, a, b];
         return performance;
     }
 }
+
+window.getStarRating = getStarRating;
 window.getPerformance = getPerformance;
 
 export function getRank(accuracy, misses) {
