@@ -42,9 +42,9 @@ export function recalcStars(mods = game.mods) {
         const map = maps[i];
         const mapElem = getElementById(`map-${map.id}`);
         const diffElem = mapElem.querySelector(".map-difficulty");
-        const stars = map.getStars(game.keys, mods);
-        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(game.mode, stars, 1, 0, map.hitObjects[game.keys].length, game.speed).toFixed(1)} max pp`;
-        diffElem.style.color = getColor(stars);
+        const stars = map.getStars(game.keys);
+        diffElem.innerText = menuStarText(stars, map.hitObjects);
+        diffElem.style.color = getColor(stars.overall);
     }
 }
 
@@ -99,6 +99,14 @@ function lerpColor(a, b, amount) {
         rg = ag + amount * (bg - ag),
         rb = ab + amount * (bb - ab);
     return "#" + ((1 << 24) + (rr << 16) + (rg << 8) + rb | 0).toString(16).slice(1);
+}
+
+function menuStarText(stars, perKey) {
+    return `${stars.overall.toFixed(2)}* | ${getPerformance(game.mode, stars.overall, 1, 0, perKey[game.keys].length, game.speed).toFixed(1)} max pp`
+    + `\n${stars.standard.toFixed(2)}* standard`
+    + `\n${stars.speed.toFixed(2)}* speed`
+    + `\n${stars.holds.toFixed(2)}* LNs`
+    + `\n${(stars.reading ?? 0).toFixed(2)}* reading`;
 }
 
 for (const elem of document.querySelectorAll(".map-difficulty")) {
@@ -343,11 +351,7 @@ getElementById("file-drop").addEventListener("change", e => {
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
                         const stars = getStarRating(game.mode, perKey[game.keys], game.speed, undefined, game.mods, {all: true});
-                        diffElem.innerText = `${stars.overall.toFixed(2)}* | ${getPerformance(game.mode, stars.overall, 1, 0, perKey[game.keys].length, game.speed).toFixed(1)} max pp`
-                                             + `\n${stars.standard.toFixed(2)}* standard`
-                                             + `\n${stars.speed.toFixed(2)}* speed`
-                                             + `\n${stars.holds.toFixed(2)}* LNs`
-                                             + `\n${(stars.reading ?? 0).toFixed(2)}* reading`;
+                        diffElem.innerText = menuStarText(stars, perKey);
                         diffElem.style.color = getColor(stars.overall);
                         mapElem.appendChild(diffElem);
                         mapElem.setAttribute("data-id", maps.length);
@@ -385,7 +389,7 @@ getElementById("file-drop").addEventListener("change", e => {
                             hitObjects: perKey,
                             hitObjectsPerInterval,
                             originalKeys,
-                            getStars: k => getStarRating(game.mode, perKey[k], game.speed, undefined, game.mods)
+                            getStars: k => getStarRating(game.mode, perKey[k], game.speed, undefined, game.mods, {all: true})
                         });
 
                         async function loadMap(e) { // start game
@@ -607,7 +611,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                 }
                                 const length = inputEvents.length;
                                 inputEvents = inputEvents.filter(e => !e.processed);
-                                statsNeedRecalculation = length > inputEvents.length; // if the length changed, process
+                                if (!statsNeedRecalculation) statsNeedRecalculation = length > inputEvents.length; // if the length changed, process
                                 const currentInterval = Math.floor(currentTime / 1000);
                                 canvas.width = canvas.width;
 
@@ -691,6 +695,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                                 misses++;
                                                 combo = 0;
                                                 totalAccuracy++;
+                                                statsNeedRecalculation = true;
 
                                                 getElementById("judgment").textContent = "Miss";
                                                 getElementById("judgment").style.color = "#f55";

@@ -80,7 +80,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = 6 
                 }
             }
 
-            function evaluate(time, multiplier = 1, setLasts = true) {
+            function evaluate(time, multiplier = 1, setLasts = true, addSpeed = true) {
                 const valid = isFinite(lastDeltas[column]);
                 const realDelta = Math.min((time - (lastColumns[column] ?? -Infinity)), 1.8 * (15 + time - (lastEnds[column] ?? -Infinity))) / speedMul;
                 const delta = (realDelta + (valid ? lastDeltas[column] * diffSpikePrev : 0)) / (valid ? diffSpikePrev + 1 : 1); // time since last object (ms); first object is treated as free
@@ -94,7 +94,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = 6 
                 const deltaLast = (realDeltaLast + (validAll ? lastDeltaAll * diffSpikePrev : 0)) / (validAll ? diffSpikePrev + 1 : 1);
                 if (setLasts) lastDeltaAll = deltaLast;
 
-                if (!isFinite(speedBuff)) speedBuff = realDeltaLast;
+                if (!isFinite(speedBuff)) speedBuff = realDeltaLast * 10;
                 if (setLasts) speedBuff = speedBuff * (1 - 1 / (diffSpikePrev + 4)) + realDeltaLast / (diffSpikePrev + 4);
 
                 if (delta === 0) {
@@ -106,9 +106,9 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = 6 
                     const repetitionDecrease = (Math.abs(realDelta < lastRealDelta ? (realDelta - lastRealDelta) / lastRealDelta : (lastRealDelta - realDelta) / realDelta) ** 0.5 * 1.1 + 0.1) ** 0.25 || 0; // repeated patterns = easier
 
                     if (setLasts) lastAddition2 = 0;
-                    const standardOut = ((1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3) / 4 * repetitionDecrease;
-                    const speedOut = 1 / (speedBuff / Math.min(1, repetitionDecrease ** 2)) ** 2 * 6000;
-                    const holdsOut = options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0) * Math.min(1, (time - b.time) / 150) * (b.multiplier || 1), 0) ** (1 / 4) / 2;
+                    const standardOut = ((1 / (delta + 1)) ** 2 * 1e5 * repetitionDecrease + lastAddition * 3) / 4;
+                    const speedOut = addSpeed ? 1 / (speedBuff / Math.min(1, repetitionDecrease ** 2)) ** 2 * 7000 : 0;
+                    const holdsOut = options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0) * Math.min(1, (time - b.time) / 150) * (b.multiplier || 1), 0) ** 0.5 * 2.8;
                     const out = (standardOut + speedOut + holdsOut) * multiplier; // ultimate addition
 
                     if (setLasts) lastAddition = standardOut;
@@ -118,9 +118,9 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = 6 
                     }
                     if (!options.evalHoldsPrior) {
                         difficulty += out ** 4;
-                        standardDifficulty += standardOut ** 4;
-                        speedDifficulty += speedOut ** 4;
-                        holdsDifficulty += holdsOut ** 4;
+                        standardDifficulty += standardOut ** 4 * multiplier;
+                        speedDifficulty += speedOut ** 4 * multiplier;
+                        holdsDifficulty += holdsOut ** 4 * multiplier;
                     }
                 }
                 if (setLasts) lastColumns[obj.column] = time; // update last time for this column
@@ -131,7 +131,7 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = 6 
             }
 
             evaluate(obj.time);
-            if (obj.type === 1) evaluate(obj.end, options.evalHoldsPrior ? 1 : 0, false);
+            if (obj.type === 1) evaluate(obj.end, options.evalHoldsPrior ? 1 : 0, false, false);
 
             // active hold notes
             if (obj.type === 1) {
