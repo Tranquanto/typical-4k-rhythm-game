@@ -4,7 +4,7 @@ import { getElementById } from "./getElementById.js"; // to prevent constantly c
 
 export const game = {
     mode: "keys",
-    noteShape: 0, // 0 = rectangle, 1 = circle
+    noteShape: 1, // 0 = rectangle, 1 = circle
     keys: 4,
     speed: 1,
     offset: 0, // audio offset in ms
@@ -342,9 +342,13 @@ getElementById("file-drop").addEventListener("change", e => {
 
                         const diffElem = document.createElement("span");
                         diffElem.classList.add("map-difficulty");
-                        const stars = getStarRating(game.mode, perKey[game.keys], game.speed, undefined, game.mods);
-                        diffElem.textContent = `${stars.toFixed(2)}* | ${getPerformance(game.mode, stars, 1, 0, perKey[game.keys].length, game.speed).toFixed(1)} max pp`;
-                        diffElem.style.color = getColor(stars);
+                        const stars = getStarRating(game.mode, perKey[game.keys], game.speed, undefined, game.mods, {all: true});
+                        diffElem.innerText = `${stars.overall.toFixed(2)}* | ${getPerformance(game.mode, stars.overall, 1, 0, perKey[game.keys].length, game.speed).toFixed(1)} max pp`
+                                             + `\n${stars.standard.toFixed(2)}* standard`
+                                             + `\n${stars.speed.toFixed(2)}* speed`
+                                             + `\n${stars.holds.toFixed(2)}* LNs`
+                                             + `\n${(stars.reading ?? 0).toFixed(2)}* reading`;
+                        diffElem.style.color = getColor(stars.overall);
                         mapElem.appendChild(diffElem);
                         mapElem.setAttribute("data-id", maps.length);
 
@@ -438,7 +442,7 @@ getElementById("file-drop").addEventListener("change", e => {
 
                             let score = 0, scoreDisplay = 0;
                             let combo = 0, maxCombo = 0;
-                            let stars = 0, pf = 0;
+                            let stars = 0, starOutput = {overall: 0}, pf = 0;
                             let pfDisplay = 0, starsDisplay = 0;
                             let statsNeedRecalculation = false;
                             let hits = 0;
@@ -552,7 +556,7 @@ getElementById("file-drop").addEventListener("change", e => {
                                             const hitObject = intervalNotes[j];
                                             if (hitObject.done || isRelease && !hitObject.started) continue;
                                             if (hitObject.column === column) {
-                                                const timeDiff = (isRelease ? hitObject.end : hitObject.time) - time; // negative = late
+                                                const timeDiff = ((isRelease ? hitObject.end : hitObject.time) - time) / game.speed; // negative = late; adjusted for speed
                                                 const absTimeDiff = Math.abs(timeDiff);
                                                 for (let k = 0; k < judgments.length; k++) {
                                                     const judgment = judgments[k];
@@ -714,7 +718,10 @@ getElementById("file-drop").addEventListener("change", e => {
                                 accuracyDisplay = lerp(accuracyDisplay, hits + misses > 0 ? ((cumulativeAccuracy / totalAccuracy) * 100).toFixed(2) : 100, 0.1);
                                 getElementById("accuracy").textContent = `Accuracy: ${accuracyDisplay.toFixed(2)}%`;
 
-                                if (statsNeedRecalculation) stars = getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed);
+                                if (statsNeedRecalculation) {
+                                    starOutput = getStarRating(game.mode, hitObjects.slice(0, hits + misses), game.speed, undefined, undefined, {all: true});
+                                    stars = starOutput.overall ?? 0;
+                                }
                                 starsDisplay = lerp(starsDisplay, stars, 0.1);
                                 if (statsNeedRecalculation) pf = getPerformance(game.mode, stars, cumulativeAccuracy / totalAccuracy || 0, misses, hits + misses, game.speed);
                                 pfDisplay = lerp(pfDisplay, pf, 0.1);

@@ -30,8 +30,11 @@ export function modify(hitObjects, mods = new Set()) {
  * @param {Set.<string>} mods a set of mods to apply
  * @returns {number} star rating
  */
-export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Math.max(10, hitObjects.length / 50), mods = new Set(),
-    options = {evalHoldsPrior: false}
+export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = 6 ?? Math.max(10, hitObjects.length / 50), mods = new Set(),
+    options = {
+        evalHoldsPrior: false,
+        all: false
+    }
 ) {
     if (hitObjects.length === 0) return 0; // no objects = 0 stars
 
@@ -51,21 +54,23 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
         }
 
         let difficulty = 0; // total added difficulty that gets ultimately gets converted to stars
+        let standardDifficulty = 0,
+            speedDifficulty = 0,
+            holdsDifficulty = 0;
 
         let lastAddition = 0;
         let lastAddition2 = 0;
         let lastColumns = Array(10).fill(-Infinity);
         let lastEnds = Array(10).fill(-Infinity);
         let lastDeltaColumns = Array(10).fill(0);
-        let lastDelta = Infinity, lastDeltaAll = Infinity;
+        let lastDeltas = Array(10).fill(Infinity), lastDeltaAll = Infinity;
         let speedBuff = Infinity; // fast notes across different columns also increase difficulty
-        let lastLength = Infinity; // for hold notes
         let activeHolds = [];
 
         for (let i = 0; i < modified.length; i++) {
             const obj = modified[i];
 
-            difficulty += 1e-8 * (i + 1); // tiny increase per object
+            difficulty += 1e-6 * (i + 1); // tiny increase per object
             const column = obj.column;
 
             for (let h = 0; h < activeHolds.length; h++) {
@@ -76,10 +81,10 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
             }
 
             function evaluate(time, multiplier = 1, setLasts = true) {
-                const valid = isFinite(lastDelta);
+                const valid = isFinite(lastDeltas[column]);
                 const realDelta = Math.min((time - (lastColumns[column] ?? -Infinity)), 1.8 * (15 + time - (lastEnds[column] ?? -Infinity))) / speedMul;
-                const delta = (realDelta + (valid ? lastDelta * diffSpikePrev : 0)) / (valid ? diffSpikePrev + 1 : 1); // time since last object (ms); first object is treated as free
-                if (setLasts) lastDelta = delta;
+                const delta = (realDelta + (valid ? lastDeltas[column] * diffSpikePrev : 0)) / (valid ? diffSpikePrev + 1 : 1); // time since last object (ms); first object is treated as free
+                if (setLasts) lastDeltas[column] = delta;
 
                 // find end that was closest to current time but before it
                 const lastEnd = Math.max(...ends.filter(e => e <= time));
@@ -101,21 +106,22 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
                     const repetitionDecrease = (Math.abs(realDelta < lastRealDelta ? (realDelta - lastRealDelta) / lastRealDelta : (lastRealDelta - realDelta) / realDelta) ** 0.5 * 1.1 + 0.1) ** 0.25 || 0; // repeated patterns = easier
 
                     if (setLasts) lastAddition2 = 0;
-                    const out = (
-                        (
-                            (1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3
-                        ) / 4 * repetitionDecrease * (
-                            1 / Math.min(speedBuff / Math.min(1, repetitionDecrease) / 1000, 1)
-                        ) ** 0.07
-                        + (options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0) * Math.min(1, (time - b.time) / 150) * (b.multiplier || 1), 0) ** (1 / 3) / 2)
-                    ) * multiplier; // ultimate addition
+                    const standardOut = ((1 / (delta + 1)) ** 2 * 1e5 + lastAddition * 3) / 4 * repetitionDecrease;
+                    const speedOut = 1 / (speedBuff / Math.min(1, repetitionDecrease ** 2)) ** 2 * 6000;
+                    const holdsOut = options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0) * Math.min(1, (time - b.time) / 150) * (b.multiplier || 1), 0) ** (1 / 4) / 2;
+                    const out = (standardOut + speedOut + holdsOut) * multiplier; // ultimate addition
 
-                    if (setLasts) lastAddition = out;
+                    if (setLasts) lastAddition = standardOut;
                     if (options.evalHoldsPrior) {
                         if (obj.difficulty === undefined) obj.difficulty = 0;
                         obj.difficulty += out;
                     }
-                    if (!options.evalHoldsPrior) difficulty += out ** 4;
+                    if (!options.evalHoldsPrior) {
+                        difficulty += out ** 4;
+                        standardDifficulty += standardOut ** 4;
+                        speedDifficulty += speedOut ** 4;
+                        holdsDifficulty += holdsOut ** 4;
+                    }
                 }
                 if (setLasts) lastColumns[obj.column] = time; // update last time for this column
                 if (setLasts) lastEnds[obj.column] = obj.end ?? time;
@@ -136,13 +142,27 @@ export function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePrev = Ma
             }
         }
         if (options.evalHoldsPrior) return modified;
-        let stars = difficulty ** (1 / 12) * 2.5 - 1; // convert "difficulty" to star rating
-        if (stars < 1) stars = (stars + 1) ** 2 / 4;
-        return stars;
+        if (!options.all) return starsFromDifficulty(difficulty);
+        else {
+            return {
+                overall: starsFromDifficulty(difficulty),
+                standard: starsFromDifficulty(standardDifficulty),
+                speed: starsFromDifficulty(speedDifficulty),
+                holds: starsFromDifficulty(holdsDifficulty),
+                difficulty,
+                standardDifficulty,
+                speedDifficulty,
+                holdsDifficulty
+            };
+        }
     }
 }
 
-export function getPerformance(mode, stars, accuracy = 1, misses = 0, notes = stars * 1000, speedMul = 1) { // stars to performance points
+function starsFromDifficulty(difficulty) {
+    return Math.max(0, difficulty ** (1 / 12) * 2.5 - 1);
+}
+
+export function getPerformance(mode, stars, accuracy = 1, misses = 0, notes = stars * 1000) { // stars to performance points
     let debug = false;
     if (accuracy === true) {
         debug = true;
@@ -150,7 +170,7 @@ export function getPerformance(mode, stars, accuracy = 1, misses = 0, notes = st
     }
 
     if (mode === "keys") {
-        const mul = (accuracy ** (8 / speedMul)) / (1 || (1 + misses * 40 / (notes || 1)));
+        const mul = (accuracy ** 8) / (1 || (1 + misses * 40 / (notes || 1)));
 
         let a = 2.8 ** (Math.log(stars) / Math.log(1.7)) * 7 * mul;
 
