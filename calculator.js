@@ -22,6 +22,57 @@ export function modify(hitObjects, mods = new Set()) {
     return hitObjects;
 }
 
+export function hitObjectsFromOsuFile(content) {
+    const lines = content.split("\n").map(l => l.trim()).filter(l => l.length);
+    const mode = lines.find(l => l.startsWith("Mode:")).split(":")[1].trim();
+    
+    const originalKeys = lines.find(l => l.startsWith("CircleSize:"))?.split(":")[1].trim() ?? 4;
+    
+    const useRandom = mode !== "3";
+    
+    let timingPoints = [];
+    const timingPointsIndex = lines.findIndex(l => l === "[TimingPoints]");
+    let lastBeatLength = 500;
+    if (timingPointsIndex !== -1) {
+        const timingPointsLines = lines.slice(timingPointsIndex + 1);
+        for (let i = 0; i < timingPointsLines.length; i++) {
+            const line = timingPointsLines[i];
+            if (line.trim().length === 0 || line.startsWith("[")) break;
+            
+            const parts = line.split(",");
+            const time = Number(parts[0]);
+            const beatLength = Number(parts[1]);
+            if (beatLength < 0) {
+                timingPoints.push({time, beatLength: lastBeatLength, scrollSpeed: -100 / beatLength});
+            } else {
+                timingPoints.push({time, beatLength, scrollSpeed: 1});
+                lastBeatLength = beatLength;
+            }
+        }
+    }
+    
+    const hitObjectsIndex = lines.findIndex(l => l === "[HitObjects]");
+
+    const hitObjects = [...new Set(lines.slice(hitObjectsIndex + 1).map((l, i) => {
+        const parts = l.split(",");
+        const data = {
+            column: Math.max(Math.floor(Number(parts[0]) / 512 * originalKeys), 0),
+            time: Number(parts[2]),
+            type: 0 // standard, short-hit note
+        };
+        
+        if (parts[5]?.split(":")[0] !== "0" && parts[3] === "128") {
+            parts[5] = parts[5].split(":")[0];
+            data.type = 1; // long/hold note
+            data.end = Number(parts[5]);
+        }
+        
+        return data;
+    }))];
+
+    return hitObjects;
+}
+
 /**
  * Calculates and returns the star rating for a given set of hit objects.
  * @param {Object[]} hitObjects an array of all the hit objects
@@ -37,7 +88,7 @@ export async function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePre
     }
 ) {
     return new Promise(async (resolve, reject) => {
-        if (hitObjects.length === 0) resolve(0); // no objects = 0 stars
+        if (!hitObjects || hitObjects.length === 0) resolve(0); // no objects = 0 stars
 
         let modified = !options.evalHoldsPrior ? modify(JSON.parse(JSON.stringify(hitObjects)), mods) : JSON.parse(JSON.stringify(hitObjects));
 
@@ -105,7 +156,7 @@ export async function getStarRating(mode, hitObjects, speedMul = 1, diffSpikePre
 
                         if (setLasts) lastAddition2 = 0;
                         const standardOut = ((1 / (delta + 1)) ** 2 * 1e5 * repetitionDecrease + lastAddition * 3) / 4;
-                        const speedOut = addSpeed ? 1 / (speedBuff / Math.min(1, repetitionDecrease ** 2)) ** 2 * 7000 : 0;
+                        const speedOut = !options.evalHoldsPrior && addSpeed ? 1 / (speedBuff / Math.min(1, repetitionDecrease ** 2)) ** 2 * 7000 : 0;
                         const holdsOut = options.evalHoldsPrior ? 0 : activeHolds.reduce((a, b) => a + (b.difficulty || 0) * Math.min(1, (time - b.time) / 150) * (b.multiplier || 1), 0) ** 0.5 * 2.8;
                         const out = (standardOut + speedOut + holdsOut) * multiplier; // ultimate addition
 
@@ -183,9 +234,6 @@ export function getPerformance(mode, stars, accuracy = 1, misses = 0, notes = st
     }
 }
 
-window.getStarRating = getStarRating;
-window.getPerformance = getPerformance;
-
 export function getRank(accuracy, misses) {
     let colors = {
         X: "#ccc",
@@ -212,4 +260,4 @@ export function lerp(a, b, t) {
     return a + (b - a) * t;
 }
 
-for (let i = 0; i < 15; i++) console.log(i + "*", "|", getPerformance("keys", i, true).map(x => x.toFixed(2)).join(", "));
+// for (let i = 0; i < 15; i++) console.log(i + "*", "|", getPerformance("keys", i, true).map(x => x.toFixed(2)).join(", "));
